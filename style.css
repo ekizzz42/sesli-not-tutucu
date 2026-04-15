@@ -262,6 +262,20 @@ textarea::placeholder { color: var(--text-muted); }
     opacity: 0.8;
 }
 
+.note-reminder-badge {
+    position: absolute;
+    top: 0.8rem; left: 0.8rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(0, 229, 255, 0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 20px;
+    display: flex; align-items: center; gap: 4px;
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    z-index: 2;
+}
+
 .note-content { font-size: clamp(0.95rem, 3vw, 1rem); line-height: 1.6; margin-bottom: 1.2rem; white-space: pre-wrap; word-break: break-word; flex: 1; padding-right: 1.5rem; }
 
 .note-footer { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

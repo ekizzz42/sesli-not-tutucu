@@ -24,6 +24,7 @@ const cancelEditBtn  = document.getElementById('cancelEdit');
 const closeModalBtn  = document.getElementById('closeModal');
 
 let notes = [];
+let reminders = []; // Hatırlatıcıları tutacak dizi
 let recognition = null;
 let isRecording = false;
 let currentEditId = null;
@@ -42,12 +43,17 @@ const COLORS = [
 // ────────────────────────────────────────
 function saveNotes() {
     localStorage.setItem('vocalnotes_data_v2', JSON.stringify(notes));
+    localStorage.setItem('vocalnotes_reminders', JSON.stringify(reminders));
 }
 
 function loadNotes() {
     try {
         const raw = localStorage.getItem('vocalnotes_data_v2');
         notes = raw ? JSON.parse(raw) : [];
+        
+        const rawReminders = localStorage.getItem('vocalnotes_reminders');
+        reminders = rawReminders ? JSON.parse(rawReminders) : [];
+
         // Legacy support (v1 to v2 transition)
         if (notes.length === 0) {
             const oldRaw = localStorage.getItem('vocalnotes_data');
@@ -58,6 +64,7 @@ function loadNotes() {
         }
     } catch {
         notes = [];
+        reminders = [];
     }
 }
 
@@ -110,8 +117,16 @@ function renderNotes() {
             day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
         });
 
+        // Bu nota ait aktif hatırlatıcı var mı?
+        const reminder = reminders.find(r => r.noteId === note.id && !r.triggered);
+        const reminderHtml = reminder ? `
+            <div class="note-reminder-badge" title="${new Date(reminder.time).toLocaleString('tr-TR')}">
+                <i class="fa-solid fa-bell"></i> ${new Date(reminder.time).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}
+            </div>` : '';
+
         card.innerHTML = `
             ${note.pinned ? '<div class="note-pinned-badge"><i class="fa-solid fa-thumbtack"></i> Sabitlendi</div>' : ''}
+            ${reminderHtml}
             <div class="note-content">${escapeHtml(note.text)}</div>
             <div class="note-footer">
                 <span class="note-date">
@@ -151,22 +166,108 @@ function addNote(text) {
         return;
     }
 
+    const noteId = Date.now();
     const note = {
-        id: Date.now(),
+        id: noteId,
         text: text,
         pinned: false,
         colorIdx: notes.length,
     };
 
     notes.push(note);
+    
+    // Hatırlatıcı komutu kontrolü
+    const reminderTime = parseReminderCommand(text);
+    if (reminderTime) {
+        reminders.push({
+            id: Date.now() + Math.random(),
+            noteId: noteId,
+            time: reminderTime,
+            text: text,
+            triggered: false
+        });
+        requestNotificationPermission();
+        showStatus('⏰ Hatırlatıcı kuruldu!', 'ok');
+    } else {
+        showStatus('✅ Not başarıyla eklendi!', 'ok');
+    }
+
     saveNotes();
     renderNotes();
     
     noteInput.value = '';
     updateCharCounter();
     autoResize(noteInput);
-    showStatus('✅ Not başarıyla eklendi!', 'ok');
 }
+
+function parseReminderCommand(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Pattern: "X gün/saat/dakika sonra hatırlat"
+    const relativeMatch = lowerText.match(/(\d+)\s*(gün|saat|dakika|dk|sn|saniye)\s*sonra\s*hatırlat/);
+    if (relativeMatch) {
+        const amount = parseInt(relativeMatch[1]);
+        const unit = relativeMatch[2];
+        let ms = 0;
+        
+        if (unit.startsWith('gün')) ms = amount * 24 * 60 * 60 * 1000;
+        else if (unit.startsWith('saat')) ms = amount * 60 * 60 * 1000;
+        else if (unit.startsWith('dakika') || unit === 'dk') ms = amount * 60 * 1000;
+        else if (unit.startsWith('saniye') || unit === 'sn') ms = amount * 1000;
+        
+        return Date.now() + ms;
+    }
+
+    // Pattern: "yarın hatırlat"
+    if (lowerText.includes('yarın hatırlat')) {
+        // Yarın bu saate kur
+        return Date.now() + 24 * 60 * 60 * 1000;
+    }
+
+    return null;
+}
+
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+function checkReminders() {
+    const now = Date.now();
+    let changed = false;
+
+    reminders.forEach(r => {
+        if (!r.triggered && now >= r.time) {
+            r.triggered = true;
+            changed = true;
+            sendNotification(r.text);
+        }
+    });
+
+    if (changed) {
+        // Tetiklenenleri temizleyebiliriz veya işaretli bırakabiliriz
+        // Şimdilik silmeyelim ki tekrar tekrar tetiklenmesin ama saklayalım (triggered=true)
+        saveNotes();
+    }
+}
+
+function sendNotification(text) {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+        new Notification('VocalNotes Hatırlatıcı', {
+            body: text,
+            icon: 'favicon.ico' // Varsa ikon
+        });
+    } else {
+        // Tarayıcı bildirimi yoksa status message olarak göster
+        showStatus(`⏰ HATIRLATICI: ${text}`, 'warn');
+    }
+}
+
+// Her 10 saniyede bir kontrol et
+setInterval(checkReminders, 10000);
 
 function deleteNote(id) {
     const card = document.querySelector(`.note-card[data-id="${id}"]`);
@@ -175,6 +276,7 @@ function deleteNote(id) {
         card.style.transition = '0.3s';
         setTimeout(() => {
             notes = notes.filter(n => n.id !== id);
+            reminders = reminders.filter(r => r.noteId !== id);
             saveNotes();
             renderNotes();
         }, 300);
