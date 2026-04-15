@@ -31,8 +31,18 @@ const langSelect      = document.getElementById('langSelect');
 const themeButtons    = document.querySelectorAll('.theme-btn');
 const visualizer      = document.getElementById('visualizer');
 
+// Auth Elements
+const authOverlay     = document.getElementById('authOverlay');
+const loginForm       = document.getElementById('loginForm');
+const registerForm    = document.getElementById('registerForm');
+const toRegister      = document.getElementById('toRegister');
+const toLogin         = document.getElementById('toLogin');
+const currentUserName = document.getElementById('currentUserName');
+const logoutBtn       = document.getElementById('logoutBtn');
+
 let notes = [];
 let reminders = [];
+let currentUser = null;
 let userSettings = {
     theme: 'dark',
     lang: 'tr'
@@ -55,34 +65,28 @@ const COLORS = [
 // LocalStorage
 // ────────────────────────────────────────
 function saveNotes() {
-    localStorage.setItem('vocalnotes_data_v2', JSON.stringify(notes));
-    localStorage.setItem('vocalnotes_reminders', JSON.stringify(reminders));
-    localStorage.setItem('vocalnotes_settings', JSON.stringify(userSettings));
+    if (!currentUser) return;
+    localStorage.setItem(`vocalnotes_data_${currentUser.id}`, JSON.stringify(notes));
+    localStorage.setItem(`vocalnotes_reminders_${currentUser.id}`, JSON.stringify(reminders));
+    localStorage.setItem(`vocalnotes_settings_${currentUser.id}`, JSON.stringify(userSettings));
 }
 
 function loadNotes() {
+    if (!currentUser) return;
     try {
-        const raw = localStorage.getItem('vocalnotes_data_v2');
+        const userId = currentUser.id;
+        const raw = localStorage.getItem(`vocalnotes_data_${userId}`);
         notes = raw ? JSON.parse(raw) : [];
         
-        const rawReminders = localStorage.getItem('vocalnotes_reminders');
+        const rawReminders = localStorage.getItem(`vocalnotes_reminders_${userId}`);
         reminders = rawReminders ? JSON.parse(rawReminders) : [];
 
-        const rawSettings = localStorage.getItem('vocalnotes_settings');
+        const rawSettings = localStorage.getItem(`vocalnotes_settings_${userId}`);
         if (rawSettings) userSettings = JSON.parse(rawSettings);
 
         // Settings'i uygula
         applyTheme(userSettings.theme);
         applyLanguage(userSettings.lang);
-
-        // Legacy support
-        if (notes.length === 0) {
-            const oldRaw = localStorage.getItem('vocalnotes_data');
-            if (oldRaw) {
-                notes = JSON.parse(oldRaw);
-                saveNotes();
-            }
-        }
     } catch {
         notes = [];
         reminders = [];
@@ -418,6 +422,56 @@ function showStatus(msg, type = 'ok') {
 }
 
 // ────────────────────────────────────────
+// Kimlik Doğrulama (Auth)
+// ────────────────────────────────────────
+function checkAuth() {
+    const session = sessionStorage.getItem('vocalnotes_user');
+    if (session) {
+        currentUser = JSON.parse(session);
+        authOverlay.style.display = 'none';
+        currentUserName.textContent = currentUser.name;
+        loadNotes();
+        renderNotes();
+    } else {
+        authOverlay.style.display = 'flex';
+    }
+}
+
+function login(username, password) {
+    const users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
+    const user = users.find(u => u.name === username && u.pass === password);
+    
+    if (user) {
+        sessionStorage.setItem('vocalnotes_user', JSON.stringify(user));
+        checkAuth();
+        showStatus('👋 Hoş geldin, ' + username);
+    } else {
+        showStatus('❌ Hatalı kullanıcı adı veya şifre.', 'warn');
+    }
+}
+
+function register(username, password) {
+    const users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
+    if (users.find(u => u.name === username)) {
+        showStatus('⚠️ Bu kullanıcı adı zaten alınmış.', 'warn');
+        return;
+    }
+    
+    const newUser = { id: Date.now(), name: username, pass: password };
+    users.push(newUser);
+    localStorage.setItem('vocalnotes_users', JSON.stringify(users));
+    
+    showStatus('✅ Kayıt başarılı! Giriş yapabilirsiniz.');
+    toLogin.click(); // Giriş ekranına dön
+}
+
+function logout() {
+    sessionStorage.removeItem('vocalnotes_user');
+    currentUser = null;
+    location.reload(); // Temiz bir başlangıç için sayfayı yenile
+}
+
+// ────────────────────────────────────────
 // Dil ve Tema Yönetimi
 // ────────────────────────────────────────
 const TRANSLATIONS = {
@@ -678,11 +732,35 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Auth Events
+toRegister.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginForm.style.display = 'none';
+    registerForm.style.display = 'block';
+});
+
+toLogin.addEventListener('click', (e) => {
+    e.preventDefault();
+    registerForm.style.display = 'none';
+    loginForm.style.display = 'block';
+});
+
+loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    login(document.getElementById('loginUser').value, document.getElementById('loginPass').value);
+});
+
+registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    register(document.getElementById('regUser').value, document.getElementById('regPass').value);
+});
+
+logoutBtn.addEventListener('click', logout);
+
 // ────────────────────────────────────────
 // Başlat
 // ────────────────────────────────────────
-loadNotes();
-renderNotes();
+checkAuth();
 initSpeechRecognition();
 
 // Global Fonksiyonlar (inline onclick için)

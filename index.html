@@ -21,6 +21,45 @@
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-card glass shadow-lg">
+            <div class="auth-header">
+                <i class="fa-solid fa-microphone-lines"></i>
+                <h2>VocalNotes</h2>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form">
+                <h3>Giriş Yap</h3>
+                <div class="input-group">
+                    <i class="fa-solid fa-user"></i>
+                    <input type="text" id="loginUser" placeholder="Kullanıcı Adı" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" id="loginPass" placeholder="Şifre" required>
+                </div>
+                <button type="submit" class="btn-primary w-full">Giriş Yap</button>
+                <p class="auth-footer">Hesabın yok mu? <a href="#" id="toRegister">Kayıt Ol</a></p>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" class="auth-form" style="display:none;">
+                <h3>Kayıt Ol</h3>
+                <div class="input-group">
+                    <i class="fa-solid fa-user"></i>
+                    <input type="text" id="regUser" placeholder="Kullanıcı Adı" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" id="regPass" placeholder="Şifre" required>
+                </div>
+                <button type="submit" class="btn-primary w-full">Kayıt Ol</button>
+                <p class="auth-footer">Zaten hesabın var mı? <a href="#" id="toLogin">Giriş Yap</a></p>
+            </form>
+        </div>
+    </div>
+
     <div class="background-blobs">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
@@ -141,7 +180,16 @@
             
             <div class="settings-content">
                 <div class="setting-item">
-                    <label><i class="fa-solid fa-palette"></i> <span id="lblTheme">Görünüm</span></label>
+                    <label><i class="fa-solid fa-user-circle"></i> <span id="lblUserAccount">Hesap</span></label>
+                    <div class="user-info glass p-3">
+                        <span id="currentUserName" class="font-bold">Misafir</span>
+                        <button id="logoutBtn" class="btn-icon btn-delete" title="Çıkış Yap">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="setting-item">
                     <div class="theme-grid">
                         <button class="theme-btn active" data-theme="dark" title="Dark">
                             <span class="theme-preview dark"></span>
