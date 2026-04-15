@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VocalNotes - Sesli Not Tutucu</title>
+    <meta name="description" content="Ses komutu ve manuel yazma ile hızlıca not tutun. Modern ve şık tasarımıyla en iyi not tutma deneyimi.">
+
+    <!-- PWA & Mobil Meta Etiketleri -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="VocalNotes">
+
+    <!-- Open Graph (Paylaşım önizlemesi) -->
+    <meta property="og:title" content="VocalNotes - Sesli Not Tutucu">
+    <meta property="og:description" content="Sesle veya yazarak not al, istediğin zaman eriş.">
+    <meta property="og:type" content="website">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="app-container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-microphone-lines"></i>
+                <h1>VocalNotes</h1>
+            </div>
+            <p class="subtitle">Aklındakileri sese dök veya yaz, biz saklarız.</p>
+        </header>
+
+        <section class="input-section">
+            <div class="input-card glass">
+                <div class="input-wrapper">
+                    <textarea id="noteInput" placeholder="Notunuzu buraya yazın veya mikrofonu kullanın..." rows="3"></textarea>
+                    <div class="input-actions">
+                        <button id="voiceBtn" class="btn-voice" title="Sesle Yaz" aria-label="Sesle not ekle">
+                            <i class="fa-solid fa-microphone"></i>
+                            <span class="pulse"></span>
+                        </button>
+                        <button id="addNoteBtn" class="btn-primary" aria-label="Not ekle">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Ekle</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="statusMessage" class="status-message" aria-live="polite"></div>
+            </div>
+        </section>
+
+        <section class="notes-section">
+            <div class="section-header">
+                <h2>Notlarım <span id="noteCount" class="note-count"></span></h2>
+                <div class="search-box glass">
+                    <i class="fa-solid fa-search"></i>
+                    <input type="search" id="searchInput" placeholder="Notlarda ara..." aria-label="Notlarda ara">
+                </div>
+            </div>
+            <div id="notesContainer" class="notes-grid"></div>
+            <div id="emptyState" class="empty-state">
+                <i class="fa-regular fa-note-sticky"></i>
+                <p>Henüz hiç notun yok.<br>İlkini eklemeye ne dersin?</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Mobil alt çubuk aksiyonları -->
+    <div class="mobile-fab" id="mobileFab" aria-label="Sesle not ekle">
+        <i class="fa-solid fa-microphone"></i>
+        <span class="pulse"></span>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
