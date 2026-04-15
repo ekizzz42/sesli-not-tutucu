@@ -16,6 +16,10 @@ const charCounter    = document.getElementById('charCounter');
 const sortSelect     = document.getElementById('sortSelect');
 const exportBtn      = document.getElementById('exportBtn');
 
+const editModal      = document.getElementById('editModal');
+const editInput      = document.getElementById('editInput');
+const saveEditBtn    = document.getElementById('saveEdit');
+const cancelEditBtn  = document.getElementById('cancelEdit');
 const closeModalBtn  = document.getElementById('closeModal');
 
 // Settings Elements
