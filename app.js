@@ -11,12 +11,23 @@ const emptyState     = document.getElementById('emptyState');
 const statusMsg      = document.getElementById('statusMessage');
 const searchInput    = document.getElementById('searchInput');
 const noteCount      = document.getElementById('noteCount');
+const installBtn     = document.getElementById('installBtn');
+const charCounter    = document.getElementById('charCounter');
+const sortSelect     = document.getElementById('sortSelect');
+const exportBtn      = document.getElementById('exportBtn');
+
+// Modal Elements
+const editModal      = document.getElementById('editModal');
+const editInput      = document.getElementById('editInput');
+const saveEditBtn    = document.getElementById('saveEdit');
+const cancelEditBtn  = document.getElementById('cancelEdit');
+const closeModalBtn  = document.getElementById('closeModal');
 
 let notes = [];
 let recognition = null;
 let isRecording = false;
+let currentEditId = null;
 
-// ── Renk paleti ──────────────────────────
 const COLORS = [
     'rgba(124,77,255,0.15)',
     'rgba(0,229,255,0.12)',
@@ -30,29 +41,50 @@ const COLORS = [
 // LocalStorage
 // ────────────────────────────────────────
 function saveNotes() {
-    localStorage.setItem('vocalnotes_data', JSON.stringify(notes));
+    localStorage.setItem('vocalnotes_data_v2', JSON.stringify(notes));
 }
 
 function loadNotes() {
     try {
-        const raw = localStorage.getItem('vocalnotes_data');
+        const raw = localStorage.getItem('vocalnotes_data_v2');
         notes = raw ? JSON.parse(raw) : [];
+        // Legacy support (v1 to v2 transition)
+        if (notes.length === 0) {
+            const oldRaw = localStorage.getItem('vocalnotes_data');
+            if (oldRaw) {
+                notes = JSON.parse(oldRaw);
+                saveNotes();
+            }
+        }
     } catch {
         notes = [];
     }
 }
 
 // ────────────────────────────────────────
-// Render
+// Render & Sort
 // ────────────────────────────────────────
-function renderNotes(filter = '') {
+function renderNotes() {
+    const filter = searchInput.value.toLowerCase();
+    const sortVal = sortSelect.value;
+    
     notesContainer.innerHTML = '';
 
-    const filtered = notes.filter(n =>
-        n.text.toLowerCase().includes(filter.toLowerCase())
-    );
+    let filtered = notes.filter(n => n.text.toLowerCase().includes(filter));
 
-    // Not sayısı etiketi
+    // Sıralama Mantığı
+    if (sortVal === 'newest') {
+        filtered.sort((a, b) => b.id - a.id);
+    } else if (sortVal === 'oldest') {
+        filtered.sort((a, b) => a.id - b.id);
+    } else if (sortVal === 'pinned') {
+        filtered.sort((a, b) => {
+            if (a.pinned === b.pinned) return b.id - a.id;
+            return a.pinned ? -1 : 1;
+        });
+    }
+
+    // Badge güncelleme
     if (notes.length > 0) {
         noteCount.textContent = notes.length;
         noteCount.classList.add('visible');
@@ -66,185 +98,225 @@ function renderNotes(filter = '') {
     }
     emptyState.classList.remove('visible');
 
-    // En yeni en üste
-    [...filtered].reverse().forEach((note, idx) => {
+    filtered.forEach((note, idx) => {
         const card = document.createElement('div');
-        card.className = 'note-card glass';
+        card.className = `note-card glass ${note.pinned ? 'is-pinned' : ''}`;
         card.style.background = COLORS[note.colorIdx % COLORS.length];
-        card.style.animationDelay = `${idx * 0.04}s`;
+        card.style.animationDelay = `${idx * 0.05}s`;
         card.setAttribute('data-id', note.id);
 
-        const date   = new Date(note.createdAt);
+        const date = new Date(note.id);
         const dateStr = date.toLocaleDateString('tr-TR', {
-            day: '2-digit', month: 'short', year: 'numeric',
-            hour: '2-digit', minute: '2-digit'
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
         });
 
         card.innerHTML = `
+            ${note.pinned ? '<div class="note-pinned-badge"><i class="fa-solid fa-thumbtack"></i> Sabitlendi</div>' : ''}
             <div class="note-content">${escapeHtml(note.text)}</div>
             <div class="note-footer">
                 <span class="note-date">
                     <i class="fa-regular fa-clock"></i>${dateStr}
                 </span>
                 <div class="note-btn-group">
-                    <button class="btn-icon btn-copy" title="Kopyala" aria-label="Kopyala" onclick="copyNote(${note.id})">
+                    <button class="btn-icon btn-pin ${note.pinned ? 'pinned' : ''}" onclick="togglePin(${note.id})" title="Sabitle">
+                        <i class="fa-solid fa-thumbtack"></i>
+                    </button>
+                    <button class="btn-icon btn-edit" onclick="openEditModal(${note.id})" title="Düzenle">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="btn-icon btn-copy" onclick="copyNote(${note.id})" title="Kopyala">
                         <i class="fa-regular fa-copy"></i>
                     </button>
-                    <button class="btn-icon btn-delete" title="Sil" aria-label="Sil" onclick="deleteNote(${note.id})">
+                    <button class="btn-icon btn-delete" onclick="deleteNote(${note.id})" title="Sil">
                         <i class="fa-regular fa-trash-can"></i>
                     </button>
                 </div>
             </div>
         `;
-
         notesContainer.appendChild(card);
     });
 }
 
 function escapeHtml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ────────────────────────────────────────
-// Not Ekle
+// Not İşlemleri
 // ────────────────────────────────────────
 function addNote(text) {
     text = text.trim();
     if (!text) {
-        showStatus('⚠️ Lütfen bir şeyler yazın veya söyleyin.', 'warn');
+        showStatus('⚠️ Lütfen bir not yazın.', 'warn');
         return;
     }
 
     const note = {
         id: Date.now(),
-        text,
-        createdAt: new Date().toISOString(),
+        text: text,
+        pinned: false,
         colorIdx: notes.length,
     };
 
     notes.push(note);
     saveNotes();
-    renderNotes(searchInput.value);
-
+    renderNotes();
+    
     noteInput.value = '';
-    noteInput.style.height = 'auto';
-    showStatus('✅ Not eklendi!', 'ok');
-
-    // Sayfayı nota doğru kaydır (mobil için)
-    notesContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    updateCharCounter();
+    autoResize(noteInput);
+    showStatus('✅ Not başarıyla eklendi!', 'ok');
 }
 
-// ────────────────────────────────────────
-// Not Sil
-// ────────────────────────────────────────
 function deleteNote(id) {
     const card = document.querySelector(`.note-card[data-id="${id}"]`);
     if (card) {
-        card.style.transition = 'all 0.3s ease';
-        card.style.transform  = 'scale(0.85)';
-        card.style.opacity    = '0';
+        card.style.transform = 'scale(0.8) opacity(0)';
+        card.style.transition = '0.3s';
         setTimeout(() => {
             notes = notes.filter(n => n.id !== id);
             saveNotes();
-            renderNotes(searchInput.value);
-        }, 280);
+            renderNotes();
+        }, 300);
+    }
+}
+
+function togglePin(id) {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        note.pinned = !note.pinned;
+        saveNotes();
+        renderNotes();
+    }
+}
+
+function copyNote(id) {
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    navigator.clipboard.writeText(note.text).then(() => {
+        showStatus('📋 Kopyalandı!', 'ok');
+    });
+}
+
+// ────────────────────────────────────────
+// Modal (Düzenleme)
+// ────────────────────────────────────────
+function openEditModal(id) {
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    currentEditId = id;
+    editInput.value = note.text;
+    editModal.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // Scroll kilitle
+    editInput.focus();
+}
+
+function closeEditModal() {
+    editModal.style.display = 'none';
+    document.body.style.overflow = 'auto';
+    currentEditId = null;
+}
+
+function saveEdit() {
+    const newText = editInput.value.trim();
+    if (!newText) return;
+    
+    const index = notes.findIndex(n => n.id === currentEditId);
+    if (index !== -1) {
+        notes[index].text = newText;
+        saveNotes();
+        renderNotes();
+        closeEditModal();
+        showStatus('✏️ Not güncellendi.');
     }
 }
 
 // ────────────────────────────────────────
-// Panoya Kopyala
+// Dışa Aktar (Export)
 // ────────────────────────────────────────
-function copyNote(id) {
-    const note = notes.find(n => n.id === id);
-    if (!note) return;
-    navigator.clipboard.writeText(note.text)
-        .then(() => showStatus('📋 Panoya kopyalandı!', 'ok'))
-        .catch(() => showStatus('⚠️ Kopyalanamadı.', 'warn'));
+function exportNotes() {
+    if (notes.length === 0) {
+        showStatus('⚠️ Aktarılacak not bulunmuyor.', 'warn');
+        return;
+    }
+    
+    let content = "--- VOCALNOTES YEDEK ---\n\n";
+    notes.forEach((n, i) => {
+        const d = new Date(n.id).toLocaleString('tr-TR');
+        content += `[${i+1}] Tarih: ${d}\n${n.text}\n\n------------------\n\n`;
+    });
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `VocalNotes_Yedek_${new Date().toLocaleDateString()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus('📤 Dosya indirildi!');
 }
 
 // ────────────────────────────────────────
-// Durum Mesajı
+// Yardımcı Fonksiyonlar
 // ────────────────────────────────────────
+function updateCharCounter() {
+    const len = noteInput.value.length;
+    charCounter.textContent = `${len} karakter`;
+    charCounter.classList.remove('warn', 'danger');
+    if (len > 200) charCounter.classList.add('warn');
+    if (len > 400) charCounter.classList.add('danger');
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+
 function showStatus(msg, type = 'ok') {
     statusMsg.textContent = msg;
     statusMsg.style.color = type === 'warn' ? '#ffc107' : 'var(--accent)';
     clearTimeout(statusMsg._timeout);
-    statusMsg._timeout = setTimeout(() => {
-        statusMsg.textContent = '';
-    }, 2800);
+    statusMsg._timeout = setTimeout(() => { statusMsg.textContent = ''; }, 3000);
 }
 
 // ────────────────────────────────────────
-// Ses Tanıma (Web Speech API)
+// Ses Tanıma
 // ────────────────────────────────────────
 function initSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-        [voiceBtn, mobileFab].forEach(btn => {
-            btn.style.opacity = '0.4';
-            btn.style.cursor  = 'not-allowed';
-            btn.title = 'Tarayıcınız ses tanımayı desteklemiyor';
-        });
-        return;
-    }
+    if (!SpeechRecognition) return;
 
     recognition = new SpeechRecognition();
-    recognition.lang            = 'tr-TR';
-    recognition.interimResults  = true;
-    recognition.continuous      = false;
+    recognition.lang = 'tr-TR';
+    recognition.interimResults = true;
+    recognition.continuous = false;
 
     recognition.onstart = () => {
         isRecording = true;
         [voiceBtn, mobileFab].forEach(b => b.classList.add('recording'));
-        showStatus('🎙️ Dinleniyor... Konuşun.');
+        showStatus('🎙️ Dinleniyor...');
     };
 
     recognition.onresult = (event) => {
         let interimText = '';
-        let finalText   = '';
+        let finalText = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            const t = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-                finalText += t;
-            } else {
-                interimText += t;
-            }
+            if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
+            else interimText += event.results[i][0].transcript;
         }
 
         if (finalText) {
-            const separator = noteInput.value ? ' ' : '';
-            noteInput.value += separator + finalText.trim();
-            autoResize();
-            showStatus('✍️ Metin alındı. Ekle butonuna basın.', 'ok');
+            noteInput.value += (noteInput.value ? ' ' : '') + finalText.trim();
+            updateCharCounter();
+            autoResize(noteInput);
         } else if (interimText) {
-            showStatus(`🎙️ ${interimText}`, 'ok');
+            showStatus(`🎙️ ${interimText}`);
         }
     };
 
-    recognition.onerror = (e) => {
-        const msgs = {
-            'no-speech'     : '⚠️ Ses algılanamadı, tekrar deneyin.',
-            'not-allowed'   : '🚫 Mikrofon izni reddedildi.',
-            'audio-capture' : '🎤 Mikrofon bulunamadı.',
-            'network'       : '🌐 Ağ hatası. İnternet bağlantınızı kontrol edin.',
-        };
-        showStatus(msgs[e.error] || `⚠️ Hata: ${e.error}`, 'warn');
-        stopRecording();
-    };
-
-    recognition.onend = () => {
-        stopRecording();
-    };
-}
-
-function startRecording() {
-    if (!recognition) return;
-    try { recognition.start(); } catch { /* zaten başlamışsa sessizce geç */ }
+    recognition.onerror = () => { stopRecording(); };
+    recognition.onend = () => { stopRecording(); };
 }
 
 function stopRecording() {
@@ -254,33 +326,23 @@ function stopRecording() {
 
 function toggleRecording() {
     if (!recognition) {
-        showStatus('⚠️ Ses tanıma kullanılamıyor. Chrome veya Edge kullanın.', 'warn');
+        showStatus('⚠️ Ses tanıma desteklenmiyor.', 'warn');
         return;
     }
-    if (isRecording) {
-        recognition.stop();
-    } else {
-        startRecording();
-    }
+    if (isRecording) recognition.stop();
+    else recognition.start();
 }
 
 // ────────────────────────────────────────
-// Textarea otomatik boyutlanma
-// ────────────────────────────────────────
-function autoResize() {
-    noteInput.style.height = 'auto';
-    noteInput.style.height = noteInput.scrollHeight + 'px';
-}
-
-// ────────────────────────────────────────
-// Event Listeners
+// Olay Dinleyiciler
 // ────────────────────────────────────────
 addNoteBtn.addEventListener('click', () => addNote(noteInput.value));
-
 voiceBtn.addEventListener('click', toggleRecording);
-
-// Mobil FAB – yalnızca ses kaydı başlatır/durdurur
 mobileFab.addEventListener('click', toggleRecording);
+searchInput.addEventListener('input', renderNotes);
+sortSelect.addEventListener('change', renderNotes);
+exportBtn.addEventListener('click', exportNotes);
+noteInput.addEventListener('input', () => { updateCharCounter(); autoResize(noteInput); });
 
 noteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -289,17 +351,35 @@ noteInput.addEventListener('keydown', (e) => {
     }
 });
 
-noteInput.addEventListener('input', autoResize);
+// Modal Events
+saveEditBtn.addEventListener('click', saveEdit);
+cancelEditBtn.addEventListener('click', closeEditModal);
+closeModalBtn.addEventListener('click', closeEditModal);
+window.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
 
-searchInput.addEventListener('input', () => {
-    renderNotes(searchInput.value);
+// PWA Install
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.style.display = 'inline-flex';
 });
 
-// ────────────────────────────────────────
-// Global (onclick'ler için)
-// ────────────────────────────────────────
-window.deleteNote = deleteNote;
-window.copyNote   = copyNote;
+installBtn.addEventListener('click', () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((res) => {
+        if (res.outcome === 'accepted') installBtn.style.display = 'none';
+        deferredPrompt = null;
+    });
+});
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+}
 
 // ────────────────────────────────────────
 // Başlat
@@ -308,45 +388,8 @@ loadNotes();
 renderNotes();
 initSpeechRecognition();
 
-// Service Worker Registration for PWA
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('SW Registered'))
-            .catch(err => console.log('SW Error', err));
-    });
-}
-
-// PWA Install Prompt Logic
-let deferredPrompt;
-const installBtn = document.getElementById('installBtn');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    // Tarayıcının varsayılan istemini engelle
-    e.preventDefault();
-    // Olayı sakla ki sonra tetikleyebilelim
-    deferredPrompt = e;
-    // Yükle butonunu göster
-    installBtn.style.display = 'inline-flex';
-});
-
-installBtn.addEventListener('click', () => {
-    if (!deferredPrompt) return;
-    // İstemi göster
-    deferredPrompt.prompt();
-    // Kullanıcının yanıtını bekle
-    deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-            console.log('Kullanıcı uygulamayı yükledi');
-            installBtn.style.display = 'none';
-        }
-        deferredPrompt = null;
-    });
-});
-
-window.addEventListener('appinstalled', () => {
-    console.log('Uygulama başarıyla yüklendi');
-    installBtn.style.display = 'none';
-});
-
-
+// Global Fonksiyonlar (inline onclick için)
+window.deleteNote = deleteNote;
+window.copyNote = copyNote;
+window.togglePin = togglePin;
+window.openEditModal = openEditModal;
