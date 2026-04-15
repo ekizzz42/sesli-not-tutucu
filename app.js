@@ -28,6 +28,8 @@ let reminders = []; // Hatırlatıcıları tutacak dizi
 let recognition = null;
 let isRecording = false;
 let currentEditId = null;
+let speechFullTranscript = ''; // Tamamlanan sesli metin
+let speechInterimTranscript = ''; // Henüz tamamlanmamış (ara) sesli metin
 
 const COLORS = [
     'rgba(124,77,255,0.15)',
@@ -160,6 +162,15 @@ function escapeHtml(text) {
 // Not İşlemleri
 // ────────────────────────────────────────
 function addNote(text) {
+    // Eğer o an kayıt yapılıyorsa, kaydı durdur ve son biriken ara metni de al
+    if (isRecording) {
+        if (speechInterimTranscript) {
+            text = (text ? text + ' ' : '') + speechInterimTranscript;
+        }
+        stopRecording();
+        if (recognition) recognition.stop();
+    }
+
     text = text.trim();
     if (!text) {
         showStatus('⚠️ Lütfen bir not yazın.', 'warn');
@@ -195,7 +206,10 @@ function addNote(text) {
     saveNotes();
     renderNotes();
     
+    // Temizlik
     noteInput.value = '';
+    speechFullTranscript = '';
+    speechInterimTranscript = '';
     updateCharCounter();
     autoResize(noteInput);
 }
@@ -391,34 +405,63 @@ function initSpeechRecognition() {
     recognition = new SpeechRecognition();
     recognition.lang = 'tr-TR';
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true; // Daha uzun konuşmalar için true yapıyoruz
 
     recognition.onstart = () => {
         isRecording = true;
         [voiceBtn, mobileFab].forEach(b => b.classList.add('recording'));
         showStatus('🎙️ Dinleniyor...');
+        
+        // Kayıt başladığında mevcut metni "baz" alıyoruz 
+        speechFullTranscript = '';
+        speechInterimTranscript = '';
     };
 
     recognition.onresult = (event) => {
-        let interimText = '';
-        let finalText = '';
+        if (!isRecording) return;
+
+        let interim = '';
+        let final = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-            if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
-            else interimText += event.results[i][0].transcript;
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                final += transcript;
+            } else {
+                interim += transcript;
+            }
         }
 
-        if (finalText) {
-            noteInput.value += (noteInput.value ? ' ' : '') + finalText.trim();
-            updateCharCounter();
-            autoResize(noteInput);
-        } else if (interimText) {
-            showStatus(`🎙️ ${interimText}`);
+        if (final) {
+            // Tamamlanan metni textarea'ya ekle
+            const space = (noteInput.value && !noteInput.value.endsWith(' ')) ? ' ' : '';
+            noteInput.value += space + final.trim();
+            speechFullTranscript += space + final.trim();
+            speechInterimTranscript = ''; // Ara metni sıfırla
+        } else {
+            speechInterimTranscript = interim;
         }
+
+        if (interim) {
+            showStatus(`🎙️ ${interim}`);
+        }
+
+        updateCharCounter();
+        autoResize(noteInput);
     };
 
-    recognition.onerror = () => { stopRecording(); };
-    recognition.onend = () => { stopRecording(); };
+    recognition.onerror = (e) => { 
+        console.error('Ses tanıma hatası:', e.error);
+        if (e.error === 'not-allowed') showStatus('⚠️ Mikrofon izni reddedildi.', 'warn');
+        stopRecording(); 
+    };
+    
+    recognition.onend = () => { 
+        if (isRecording) {
+            // Eğer hala aktifse (beklenmedik kopma), tekrar başlatılabilir veya kapatılabilir
+            stopRecording(); 
+        }
+    };
 }
 
 function stopRecording() {
@@ -431,8 +474,12 @@ function toggleRecording() {
         showStatus('⚠️ Ses tanıma desteklenmiyor.', 'warn');
         return;
     }
-    if (isRecording) recognition.stop();
-    else recognition.start();
+    if (isRecording) {
+        recognition.stop();
+        stopRecording();
+    } else {
+        recognition.start();
+    }
 }
 
 // ────────────────────────────────────────
