@@ -114,6 +114,26 @@ header {
     color: var(--text-muted);
     font-size: clamp(0.9rem, 3vw, 1.1rem);
     padding: 0 1rem;
+    margin-bottom: 1rem;
+}
+
+.btn-install {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--accent);
+    margin-top: 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-install:hover {
+    background: var(--accent);
+    color: var(--bg-dark);
 }
 
 /* ─── Glassmorphism ────────────────────── */

@@ -317,3 +317,36 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// PWA Install Prompt Logic
+let deferredPrompt;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Tarayıcının varsayılan istemini engelle
+    e.preventDefault();
+    // Olayı sakla ki sonra tetikleyebilelim
+    deferredPrompt = e;
+    // Yükle butonunu göster
+    installBtn.style.display = 'inline-flex';
+});
+
+installBtn.addEventListener('click', () => {
+    if (!deferredPrompt) return;
+    // İstemi göster
+    deferredPrompt.prompt();
+    // Kullanıcının yanıtını bekle
+    deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+            console.log('Kullanıcı uygulamayı yükledi');
+            installBtn.style.display = 'none';
+        }
+        deferredPrompt = null;
+    });
+});
+
+window.addEventListener('appinstalled', () => {
+    console.log('Uygulama başarıyla yüklendi');
+    installBtn.style.display = 'none';
+});
+
+
