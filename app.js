@@ -16,20 +16,27 @@ const charCounter    = document.getElementById('charCounter');
 const sortSelect     = document.getElementById('sortSelect');
 const exportBtn      = document.getElementById('exportBtn');
 
-// Modal Elements
-const editModal      = document.getElementById('editModal');
-const editInput      = document.getElementById('editInput');
-const saveEditBtn    = document.getElementById('saveEdit');
-const cancelEditBtn  = document.getElementById('cancelEdit');
 const closeModalBtn  = document.getElementById('closeModal');
 
+// Settings Elements
+const settingsBtn     = document.getElementById('settingsBtn');
+const settingsModal   = document.getElementById('settingsModal');
+const closeSettingsBtn = document.getElementById('closeSettings');
+const closeSettingsFull = document.getElementById('closeSettingsBtn');
+const langSelect      = document.getElementById('langSelect');
+const themeButtons    = document.querySelectorAll('.theme-btn');
+const visualizer      = document.getElementById('visualizer');
+
 let notes = [];
-let reminders = []; // Hatırlatıcıları tutacak dizi
+let reminders = [];
+let userSettings = {
+    theme: 'dark',
+    lang: 'tr'
+};
 let recognition = null;
 let isRecording = false;
 let currentEditId = null;
-let speechFullTranscript = ''; // Tamamlanan sesli metin
-let speechInterimTranscript = ''; // Henüz tamamlanmamış (ara) sesli metin
+let preSpeechText = ''; // Kayıt başlamadan önceki mevcut metin
 
 const COLORS = [
     'rgba(124,77,255,0.15)',
@@ -46,6 +53,7 @@ const COLORS = [
 function saveNotes() {
     localStorage.setItem('vocalnotes_data_v2', JSON.stringify(notes));
     localStorage.setItem('vocalnotes_reminders', JSON.stringify(reminders));
+    localStorage.setItem('vocalnotes_settings', JSON.stringify(userSettings));
 }
 
 function loadNotes() {
@@ -56,7 +64,14 @@ function loadNotes() {
         const rawReminders = localStorage.getItem('vocalnotes_reminders');
         reminders = rawReminders ? JSON.parse(rawReminders) : [];
 
-        // Legacy support (v1 to v2 transition)
+        const rawSettings = localStorage.getItem('vocalnotes_settings');
+        if (rawSettings) userSettings = JSON.parse(rawSettings);
+
+        // Settings'i uygula
+        applyTheme(userSettings.theme);
+        applyLanguage(userSettings.lang);
+
+        // Legacy support
         if (notes.length === 0) {
             const oldRaw = localStorage.getItem('vocalnotes_data');
             if (oldRaw) {
@@ -162,13 +177,11 @@ function escapeHtml(text) {
 // Not İşlemleri
 // ────────────────────────────────────────
 function addNote(text) {
-    // Eğer o an kayıt yapılıyorsa, kaydı durdur ve son biriken ara metni de al
+    // Eğer o an kayıt yapılıyorsa, kaydı durdur
     if (isRecording) {
-        if (speechInterimTranscript) {
-            text = (text ? text + ' ' : '') + speechInterimTranscript;
-        }
         stopRecording();
         if (recognition) recognition.stop();
+        text = noteInput.value; // En güncel metni al (onresult zaten textarea'yı güncelledi)
     }
 
     text = text.trim();
@@ -386,13 +399,124 @@ function updateCharCounter() {
 function autoResize(el) {
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
+    
+    // Konuşurken metin aşağı uzarsa otomatik olarak son kısma odaklan
+    if (isRecording) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
 }
 
 function showStatus(msg, type = 'ok') {
     statusMsg.textContent = msg;
-    statusMsg.style.color = type === 'warn' ? '#ffc107' : 'var(--accent)';
+    statusMsg.style.color = type === 'warn' ? 'var(--warn)' : 'var(--accent)';
     clearTimeout(statusMsg._timeout);
     statusMsg._timeout = setTimeout(() => { statusMsg.textContent = ''; }, 3000);
+}
+
+// ────────────────────────────────────────
+// Dil ve Tema Yönetimi
+// ────────────────────────────────────────
+const TRANSLATIONS = {
+    tr: {
+        subtitle: "Aklındakileri sese dök veya yaz, biz saklarız.",
+        placeholder: "Notunuzu buraya yazın veya mikrofonu kullanın...",
+        charCount: "karakter",
+        add: "Ekle",
+        search: "Notlarda ara...",
+        myNotes: "Notlarım",
+        empty: "Henüz hiç notun yok.<br>İlkini eklemeye ne dersin?",
+        edit: "Notu Düzenle",
+        save: "Kaydet",
+        cancel: "İptal",
+        settings: "Ayarlar",
+        themeName: "Görünüm",
+        langName: "Dil Seçeneği",
+        langDesc: "Ses tanıma dili seçilen dile göre ayarlanır.",
+        done: "Tamam",
+        statusListening: "🎙️ Dinleniyor...",
+        statusCopied: "📋 Kopyalandı!",
+        statusDeleted: "🗑️ Not silindi.",
+        statusAdded: "✅ Not başarıyla eklendi!",
+        statusWarn: "⚠️ Lütfen bir not yazın.",
+        statusLangWarn: "⚠️ Ses tanıma desteklenmiyor.",
+        statusMicWarn: "⚠️ Mikrofon izni reddedildi.",
+        statusNetWarn: "⚠️ Ağ bağlantısı hatası.",
+        sortNew: "En Yeni",
+        sortOld: "En Eski",
+        sortPinned: "Sabitlenmiş"
+    },
+    en: {
+        subtitle: "Speak or type your thoughts, we keep them safe.",
+        placeholder: "Type your note here or use the microphone...",
+        charCount: "characters",
+        add: "Add",
+        search: "Search notes...",
+        myNotes: "My Notes",
+        empty: "No notes yet.<br>How about adding your first?",
+        edit: "Edit Note",
+        save: "Save",
+        cancel: "Cancel",
+        settings: "Settings",
+        themeName: "Appearance",
+        langName: "Language",
+        langDesc: "Speech recognition language is set based on this choice.",
+        done: "Done",
+        statusListening: "🎙️ Listening...",
+        statusCopied: "📋 Copied!",
+        statusDeleted: "🗑️ Note deleted.",
+        statusAdded: "✅ Note added successfully!",
+        statusWarn: "⚠️ Please write a note.",
+        statusLangWarn: "⚠️ Speech recognition not supported.",
+        statusMicWarn: "⚠️ Microphone permission denied.",
+        statusNetWarn: "⚠️ Network connection error.",
+        sortNew: "Newest",
+        sortOld: "Oldest",
+        sortPinned: "Pinned"
+    }
+};
+
+function applyLanguage(lang) {
+    userSettings.lang = lang;
+    const t = TRANSLATIONS[lang];
+    
+    document.getElementById('appSubtitle').textContent = t.subtitle;
+    noteInput.placeholder = t.placeholder;
+    addNoteBtn.querySelector('span').textContent = t.add;
+    searchInput.placeholder = t.search;
+    document.querySelector('.section-header h2').firstChild.textContent = t.myNotes + ' ';
+    emptyState.querySelector('p').innerHTML = t.empty;
+    document.getElementById('lblEditNote').textContent = t.edit;
+    document.getElementById('lblSave').textContent = t.save;
+    document.getElementById('cancelEdit').textContent = t.cancel;
+    document.getElementById('lblSettings').textContent = t.settings;
+    document.getElementById('lblTheme').textContent = t.themeName;
+    document.getElementById('lblLanguage').textContent = t.langName;
+    document.getElementById('lblLangDesc').textContent = t.langDesc;
+    document.getElementById('lblDone').textContent = t.done;
+
+    // Sort options
+    sortSelect.options[0].textContent = t.sortNew;
+    sortSelect.options[1].textContent = t.sortOld;
+    sortSelect.options[2].textContent = t.sortPinned;
+
+    langSelect.value = lang;
+    
+    // Update recognition if active
+    if (recognition) {
+        recognition.lang = lang === 'tr' ? 'tr-TR' : 'en-US';
+    }
+}
+
+function applyTheme(theme) {
+    userSettings.theme = theme;
+    document.body.classList.remove('light-theme', 'midnight-theme');
+    if (theme !== 'dark') {
+        document.body.classList.add(`${theme}-theme`);
+    }
+
+    themeButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
 }
 
 // ────────────────────────────────────────
@@ -403,47 +527,39 @@ function initSpeechRecognition() {
     if (!SpeechRecognition) return;
 
     recognition = new SpeechRecognition();
-    recognition.lang = 'tr-TR';
+    recognition.lang = userSettings.lang === 'tr' ? 'tr-TR' : 'en-US';
     recognition.interimResults = true;
-    recognition.continuous = true; // Daha uzun konuşmalar için true yapıyoruz
+    recognition.continuous = true;
 
     recognition.onstart = () => {
         isRecording = true;
         [voiceBtn, mobileFab].forEach(b => b.classList.add('recording'));
-        showStatus('🎙️ Dinleniyor...');
+        if (visualizer) visualizer.classList.add('active'); // Dalgaları göster
+        showStatus(TRANSLATIONS[userSettings.lang].statusListening);
         
-        // Kayıt başladığında mevcut metni "baz" alıyoruz 
-        speechFullTranscript = '';
-        speechInterimTranscript = '';
+        preSpeechText = noteInput.value;
+        if (preSpeechText && !preSpeechText.endsWith(' ')) {
+            preSpeechText += ' ';
+        }
     };
 
     recognition.onresult = (event) => {
         if (!isRecording) return;
 
-        let interim = '';
-        let final = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-                final += transcript;
-            } else {
-                interim += transcript;
-            }
+        let currentSessionTranscript = '';
+        // Mobil cihazlarda çift yazma hatasını önlemek için 
+        // her zaman tüm sonuç listesini (0'dan itibaren) baştan sona birleştiriyoruz.
+        for (let i = 0; i < event.results.length; i++) {
+            currentSessionTranscript += event.results[i][0].transcript;
         }
 
-        if (final) {
-            // Tamamlanan metni textarea'ya ekle
-            const space = (noteInput.value && !noteInput.value.endsWith(' ')) ? ' ' : '';
-            noteInput.value += space + final.trim();
-            speechFullTranscript += space + final.trim();
-            speechInterimTranscript = ''; // Ara metni sıfırla
-        } else {
-            speechInterimTranscript = interim;
-        }
+        // Textarea içeriğini güncelle: Başlangıç Metni + Yeni Konuşulanlar
+        noteInput.value = preSpeechText + currentSessionTranscript;
 
-        if (interim) {
-            showStatus(`🎙️ ${interim}`);
+        // Son parça ara sonuç mu? (Durum çubuğunda göstermek için)
+        const lastResult = event.results[event.results.length - 1];
+        if (lastResult && !lastResult.isFinal) {
+            showStatus(`🎙️ ${lastResult[0].transcript}`);
         }
 
         updateCharCounter();
@@ -452,13 +568,22 @@ function initSpeechRecognition() {
 
     recognition.onerror = (e) => { 
         console.error('Ses tanıma hatası:', e.error);
-        if (e.error === 'not-allowed') showStatus('⚠️ Mikrofon izni reddedildi.', 'warn');
+        const t = TRANSLATIONS[userSettings.lang];
+        if (e.error === 'not-allowed') showStatus(t.statusMicWarn, 'warn');
+        else if (e.error === 'network') showStatus(t.statusNetWarn, 'warn');
         stopRecording(); 
     };
     
     recognition.onend = () => { 
+        // Eğer kullanıcı kaydı kapatmadıysa fakat tarayıcı (zaman aşımı vb.) durdurduysa,
+        // tekrar başlatarak "Sonsuz Dinleme" sağlıyoruz.
         if (isRecording) {
-            // Eğer hala aktifse (beklenmedik kopma), tekrar başlatılabilir veya kapatılabilir
+            try {
+                recognition.start();
+            } catch (e) {
+                // Zaten çalışıyorsa hata verebilir, yoksayıyoruz
+            }
+        } else {
             stopRecording(); 
         }
     };
@@ -467,6 +592,7 @@ function initSpeechRecognition() {
 function stopRecording() {
     isRecording = false;
     [voiceBtn, mobileFab].forEach(b => b.classList.remove('recording'));
+    if (visualizer) visualizer.classList.remove('active'); // Dalgaları gizle
 }
 
 function toggleRecording() {
@@ -520,6 +646,24 @@ installBtn.addEventListener('click', () => {
     deferredPrompt.userChoice.then((res) => {
         if (res.outcome === 'accepted') installBtn.style.display = 'none';
         deferredPrompt = null;
+    });
+});
+
+// Settings Events
+settingsBtn.addEventListener('click', () => { settingsModal.style.display = 'flex'; });
+closeSettingsBtn.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+closeSettingsFull.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+window.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.style.display = 'none'; });
+
+langSelect.addEventListener('change', (e) => {
+    applyLanguage(e.target.value);
+    saveNotes();
+});
+
+themeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        applyTheme(btn.dataset.theme);
+        saveNotes();
     });
 });
 

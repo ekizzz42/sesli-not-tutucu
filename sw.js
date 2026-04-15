@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vocalnotes-v1.1';
+const CACHE_NAME = 'vocalnotes-v1.4';
 const ASSETS = [
   './',
   './index.html',
@@ -10,7 +10,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Eski service worker'ı hemen devre dışı bırak
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS);
@@ -19,7 +19,6 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  // Eski cache'leri temizle
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -31,6 +30,7 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  return self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {

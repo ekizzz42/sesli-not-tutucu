@@ -11,6 +11,24 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* ── Light Theme ── */
+body.light-theme {
+    --bg-dark: #f1f5f9;
+    --card-bg: rgba(255, 255, 255, 0.7);
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --glass-border: rgba(0, 0, 0, 0.1);
+}
+
+/* ── Midnight Theme ── */
+body.midnight-theme {
+    --bg-dark: #000000;
+    --card-bg: rgba(30, 41, 59, 0.4);
+    --text-main: #e2e8f0;
+    --text-muted: #64748b;
+    --glass-border: rgba(255, 255, 255, 0.05);
+}
+
 *, *::before, *::after {
     margin: 0;
     padding: 0;
@@ -47,21 +65,22 @@ body {
 .app-container { max-width: 860px; margin: 0 auto; width: 100%; }
 
 /* ── Header ───────────────────────── */
-header { text-align: center; margin-bottom: 2.5rem; }
-.logo { display: flex; align-items: center; justify-content: center; gap: 0.8rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+header { text-align: left; margin-bottom: 2.5rem; }
+.header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.header-actions { display: flex; gap: 0.8rem; }
+.logo { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
 .logo i {
-    font-size: clamp(1.8rem, 5vw, 2.5rem);
+    font-size: clamp(1.8rem, 5vw, 2.2rem);
     background: linear-gradient(135deg, var(--primary), var(--accent));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
-.logo h1 { font-size: clamp(2rem, 7vw, 3rem); font-weight: 700; letter-spacing: -1px; }
+.logo h1 { font-size: clamp(1.8rem, 7vw, 2.2rem); font-weight: 700; letter-spacing: -1px; }
 .subtitle {
     color: var(--text-muted);
-    font-size: clamp(0.9rem, 3vw, 1.1rem);
-    padding: 0 1rem;
-    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    padding-right: 2rem;
 }
 
 .btn-install {
@@ -138,7 +157,34 @@ textarea::placeholder { color: var(--text-muted); }
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .btn-voice:hover { transform: scale(1.1); background: var(--glass-border); }
-.btn-voice.recording { color: var(--danger); background: rgba(255,82,82,0.1); box-shadow: 0 0 15px rgba(255,82,82,0.4); }
+.btn-voice.recording { color: var(--danger); background: rgba(255,82,82,0.1); box-shadow: 0 0 20px rgba(255,82,82,0.3); }
+
+/* Visualizer Waves */
+.recording-visualizer {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    height: 20px;
+    margin-right: auto;
+    padding-left: 0.5rem;
+}
+.recording-visualizer.active { display: flex; }
+.recording-visualizer span {
+    width: 3px;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 10px;
+    animation: wave-anim 1s ease-in-out infinite;
+}
+.recording-visualizer span:nth-child(2) { animation-delay: 0.1s; height: 70%; }
+.recording-visualizer span:nth-child(3) { animation-delay: 0.2s; height: 40%; }
+.recording-visualizer span:nth-child(4) { animation-delay: 0.3s; height: 80%; }
+.recording-visualizer span:nth-child(5) { animation-delay: 0.4s; height: 50%; }
+
+@keyframes wave-anim {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+}
 
 .pulse { position: absolute; width: 100%; height: 100%; border-radius: 50%; background: var(--danger); opacity: 0; z-index: -1; }
 .btn-voice.recording .pulse, .mobile-fab.recording .pulse { animation: pulse-anim 1.5s ease-out infinite; }
@@ -218,8 +264,14 @@ textarea::placeholder { color: var(--text-muted); }
     -webkit-appearance: none;
     min-height: 44px;
     border: 1px solid var(--glass-border);
-    background: var(--card-bg);
+    background: var(--bg-dark); /* Arka planı netleştiriyoruz */
     backdrop-filter: blur(12px);
+}
+
+/* Option renklerini tarayıcıya zorluyoruz */
+.sort-select option {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
 }
 
 .btn-icon-top {
@@ -233,6 +285,20 @@ textarea::placeholder { color: var(--text-muted); }
     transition: all 0.2s ease;
 }
 .btn-icon-top:hover { color: var(--accent); border-color: var(--accent); }
+
+.settings-btn-large {
+    width: auto !important;
+    padding: 0 1rem;
+    border-radius: 50px;
+    gap: 8px;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+.settings-text { font-size: 0.85rem; font-weight: 600; }
+@media (max-width: 480px) {
+    .settings-text { display: none; }
+    .settings-btn-large { width: 44px !important; padding: 0; }
+}
 
 /* ── Notes Grid ───────────────────── */
 .note-count { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; display: none; }
@@ -370,6 +436,36 @@ textarea::placeholder { color: var(--text-muted); }
 .modal textarea:focus { border-color: var(--primary); }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.8rem; }
+.modal-actions .w-full { flex: 1; }
+
+.w-full { width: 100%; }
+.shadow-lg { box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+
+/* Settings Items */
+.settings-content { display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 1.5rem; }
+.setting-item { display: flex; flex-direction: column; gap: 0.8rem; }
+.setting-item label { font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 0.6rem; color: var(--text-main); }
+.setting-item label i { color: var(--primary); }
+.setting-desc { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Theme Grid */
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+.theme-btn {
+    height: 60px;
+    border-radius: 12px;
+    border: 2px solid transparent;
+    background: rgba(255,255,255,0.03);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+}
+.theme-btn:hover { background: rgba(255,255,255,0.06); }
+.theme-btn.active { border-color: var(--primary); background: rgba(124,77,255,0.1); }
+
+.theme-preview { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); }
+.theme-preview.dark { background: #0f172a; }
+.theme-preview.light { background: #f1f5f9; border-color: #cbd5e1; }
+.theme-preview.midnight { background: #000000; }
 
 /* ── Responsive ───────────────────── */
 @media (max-width: 768px) {

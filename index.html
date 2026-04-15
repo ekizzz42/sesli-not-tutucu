@@ -31,14 +31,22 @@
 
         <!-- HEADER -->
         <header>
-            <div class="logo">
-                <i class="fa-solid fa-microphone-lines"></i>
-                <h1>VocalNotes</h1>
+            <div class="header-top">
+                <div class="logo">
+                    <i class="fa-solid fa-microphone-lines"></i>
+                    <h1>VocalNotes</h1>
+                </div>
+                <div class="header-actions">
+                    <button id="installBtn" class="btn-install glass" style="display:none;">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                    <button id="settingsBtn" class="btn-icon-top glass settings-btn-large" title="Ayarlar">
+                        <i class="fa-solid fa-gear"></i>
+                        <span class="settings-text">Ayarlar</span>
+                    </button>
+                </div>
             </div>
-            <p class="subtitle">Aklındakileri sese dök veya yaz, biz saklarız.</p>
-            <button id="installBtn" class="btn-install glass" style="display:none;">
-                <i class="fa-solid fa-download"></i> Uygulamayı Yükle
-            </button>
+            <p class="subtitle" id="appSubtitle">Aklındakileri sese dök veya yaz, biz saklarız.</p>
         </header>
 
         <!-- INPUT -->
@@ -48,6 +56,9 @@
                     <textarea id="noteInput" placeholder="Notunuzu buraya yazın veya mikrofonu kullanın..." rows="3"></textarea>
                     <div class="char-counter" id="charCounter">0 karakter</div>
                     <div class="input-actions">
+                        <div id="visualizer" class="recording-visualizer">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
                         <button id="voiceBtn" class="btn-voice" title="Sesle Yaz" aria-label="Sesle not ekle">
                             <i class="fa-solid fa-microphone"></i>
                             <span class="pulse"></span>
@@ -103,7 +114,7 @@
     <div id="editModal" class="modal-overlay" style="display:none;">
         <div class="modal glass">
             <div class="modal-header">
-                <h3><i class="fa-solid fa-pen-to-square"></i> Notu Düzenle</h3>
+                <h3><i class="fa-solid fa-pen-to-square"></i> <span id="lblEditNote">Notu Düzenle</span></h3>
                 <button class="btn-icon" id="closeModal" aria-label="Kapat">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -112,7 +123,51 @@
             <div class="modal-actions">
                 <button id="cancelEdit" class="btn-secondary">İptal</button>
                 <button id="saveEdit" class="btn-primary">
-                    <i class="fa-solid fa-check"></i> Kaydet
+                    <i class="fa-solid fa-check"></i> <span id="lblSave">Kaydet</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ayarlar Modal -->
+    <div id="settingsModal" class="modal-overlay" style="display:none;">
+        <div class="modal glass shadow-lg">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-gear"></i> <span id="lblSettings">Ayarlar</span></h3>
+                <button class="btn-icon" id="closeSettings" aria-label="Kapat">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="settings-content">
+                <div class="setting-item">
+                    <label><i class="fa-solid fa-palette"></i> <span id="lblTheme">Görünüm</span></label>
+                    <div class="theme-grid">
+                        <button class="theme-btn active" data-theme="dark" title="Dark">
+                            <span class="theme-preview dark"></span>
+                        </button>
+                        <button class="theme-btn" data-theme="light" title="Light">
+                            <span class="theme-preview light"></span>
+                        </button>
+                        <button class="theme-btn" data-theme="midnight" title="Midnight">
+                            <span class="theme-preview midnight"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="setting-item">
+                    <label><i class="fa-solid fa-language"></i> <span id="lblLanguage">Dil Seçeneği</span></label>
+                    <select id="langSelect" class="sort-select glass w-full">
+                        <option value="tr">Türkçe</option>
+                        <option value="en">English</option>
+                    </select>
+                    <p class="setting-desc" id="lblLangDesc">Ses tanıma dili seçilen dile göre ayarlanır.</p>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button id="closeSettingsBtn" class="btn-primary w-full">
+                    <i class="fa-solid fa-check"></i> <span id="lblDone">Tamam</span>
                 </button>
             </div>
         </div>
