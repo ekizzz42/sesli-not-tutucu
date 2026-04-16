@@ -124,7 +124,7 @@ header { text-align: left; margin-bottom: 2.5rem; }
 
 textarea {
     width: 100%;
-    background: rgba(0, 0, 0, 0.25); /* Yazı alanını hafif karart */
+    background: rgba(0, 0, 0, 0.25);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     color: #ffffff !important;
@@ -137,6 +137,29 @@ textarea {
     min-height: 80px;
 }
 textarea::placeholder { color: #94a3b8; }
+
+.custom-editor {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #ffffff !important;
+    font-size: clamp(1rem, 3vw, 1.1rem);
+    font-family: 'Outfit', sans-serif;
+    padding: 0.8rem;
+    line-height: 1.6;
+    min-height: 80px;
+    max-height: 300px;
+    overflow-y: auto;
+    outline: none;
+    word-break: break-word;
+}
+.custom-editor:empty:before {
+    content: attr(data-placeholder);
+    color: #94a3b8;
+    pointer-events: none;
+    display: block;
+}
 
 .char-counter {
     font-size: 0.78rem;
@@ -202,7 +225,7 @@ textarea::placeholder { color: #94a3b8; }
     height: 48px; /* Diğer butonlarla aynı yükseklik */
     border-radius: 50px;
     font-size: 0.85rem;
-    color: var(--text-main) !important;
+    color: #000000 !important; /* Kullanıcı isteği: Siyah */
     border: 1px solid var(--glass-border);
     cursor: pointer;
     font-family: 'Outfit', sans-serif;
@@ -213,6 +236,7 @@ textarea::placeholder { color: #94a3b8; }
     transition: all 0.2s;
 }
 .category-select:hover { background: var(--glass-border) !important; }
+.category-select option { color: #000000; background: #ffffff; }
 
 .input-actions { 
     display: flex; 
@@ -510,6 +534,11 @@ textarea::placeholder { color: #94a3b8; }
 }
 .note-card[data-category="genel"] .note-date {
     color: #475569 !important;
+}
+.note-card[data-category="genel"] .note-category-badge {
+    background: rgba(255, 255, 255, 0.5) !important;
+    color: #000000 !important;
+    border: 1px solid rgba(0,0,0,0.1);
 }
 
 body.midnight-theme .note-card[data-category="genel"] {

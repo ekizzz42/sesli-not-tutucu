@@ -174,6 +174,7 @@ function renderNotes() {
     filtered.forEach((note, idx) => {
         const card = document.createElement('div');
         card.className = `note-card glass ${note.pinned ? 'is-pinned' : ''}`;
+        card.setAttribute('data-category', note.category || 'genel');
         const isGeneral = (note.category || 'genel') === 'genel';
         const textColor = isGeneral ? '#000000' : '#ffffff';
         const cardBg = isGeneral ? '#f1f5f9' : COLORS[note.colorIdx % COLORS.length];
@@ -191,9 +192,11 @@ function renderNotes() {
                 <i class="fa-solid fa-bell"></i> ${new Date(reminder.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
             </div>` : '';
 
-        let formattedText = escapeHtml(note.text)
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        let formattedText = note.text;
+        // Eğer içerisinde HTML tag'leri yoksa ve markdown işareti varsa dönüştür
+        if (!/<[a-z][\s\S]*>/i.test(formattedText)) {
+            formattedText = escapeHtml(formattedText).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>');
+        }
 
         const imagesHtml = note.images ? note.images.map(img => `<img src="${img}" loading="lazy">`).join('') : '';
 
@@ -245,16 +248,19 @@ function escapeHtml(text) {
 // ────────────────────────────────────────
 // Not İşlemleri
 // ────────────────────────────────────────
-function addNote(text) {
+function addNote(htmlText) {
+    if (typeof htmlText !== 'string' || htmlText.type === 'click' || htmlText.type === 'keydown') {
+        htmlText = noteInput.innerHTML;
+    }
     // Eğer o an kayıt yapılıyorsa, kaydı durdur
     if (isRecording) {
         stopRecording();
         if (recognition) recognition.stop();
-        text = noteInput.value; // En güncel metni al (onresult zaten textarea'yı güncelledi)
+        htmlText = noteInput.innerHTML;
     }
 
-    text = text.trim();
-    if (!text) {
+    const plainText = noteInput.innerText.trim();
+    if (!plainText) {
         showStatus('⚠️ Lütfen bir not yazın.', 'warn');
         return;
     }
@@ -262,7 +268,7 @@ function addNote(text) {
     const noteId = Date.now();
     const note = {
         id: noteId,
-        text: text,
+        text: htmlText,
         pinned: false,
         archived: false,
         trash: false,
@@ -274,7 +280,7 @@ function addNote(text) {
     notes.push(note);
     
     // Temizlik
-    noteInput.value = '';
+    noteInput.innerHTML = '';
     pendingImages = [];
     document.getElementById('imagePreview').innerHTML = '';
     document.getElementById('imagePreview').style.display = 'none';
@@ -507,7 +513,7 @@ function exportNotes() {
 // Yardımcı Fonksiyonlar
 // ────────────────────────────────────────
 function updateCharCounter() {
-    const len = noteInput.value.length;
+    const len = noteInput.innerText.length;
     charCounter.textContent = `${len} karakter`;
     charCounter.classList.remove('warn', 'danger');
     if (len > 200) charCounter.classList.add('warn');
@@ -515,12 +521,9 @@ function updateCharCounter() {
 }
 
 function autoResize(el) {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-    
-    // Konuşurken metin aşağı uzarsa otomatik olarak son kısma odaklan
+    // Contenteditable div'ler kendi boyutunu ayarlar, sadece scroll kontrolü yaparız
     if (isRecording) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }
 }
 
@@ -535,16 +538,7 @@ function showStatus(msg, type = 'ok') {
 // Zengin İçerik (Formatting & Image)
 // ────────────────────────────────────────
 function formatText(type) {
-    const start = noteInput.selectionStart;
-    const end = noteInput.selectionEnd;
-    const text = noteInput.value;
-    const selected = text.substring(start, end);
-    let formatted = "";
-
-    if (type === 'bold') formatted = `**${selected}**`;
-    else if (type === 'italic') formatted = `*${selected}*`;
-
-    noteInput.value = text.substring(0, start) + formatted + text.substring(end);
+    document.execCommand(type, false, null);
     noteInput.focus();
     updateCharCounter();
 }
@@ -552,7 +546,7 @@ function formatText(type) {
 function handleVoiceCommand(transcript) {
     const cmd = transcript.toLowerCase().trim();
     if (cmd.includes('notu ekle') || cmd.includes('add note')) {
-        addNote(noteInput.value);
+        addNote(noteInput.innerHTML);
         return true;
     }
     if (cmd.includes('gece moduna geç') || cmd.includes('midnight mode')) {
@@ -577,19 +571,46 @@ function handleVoiceCommand(transcript) {
 }
 
 function aiSummarize() {
-    const text = noteInput.value.trim();
-    if (text.length < 20) {
-        showStatus('⚠️ Özetlemek için metin çok kısa.', 'warn');
+    const htmlText = noteInput.innerHTML;
+    const plainText = noteInput.innerText.trim();
+    
+    if (plainText.length < 5) {
+        showStatus(userSettings.lang === 'tr' ? '⚠️ Komut vermek için daha uzun bir metin yazın.' : '⚠️ Text is too short for a command.', 'warn');
         return;
     }
-    showStatus('🪄 AI Özetliyor...', 'ok');
+
+    showStatus(userSettings.lang === 'tr' ? '🪄 AI İşlem Yapıyor...' : '🪄 AI Processing...', 'ok');
+    
     setTimeout(() => {
-        const sentences = text.split(/[.!?]/);
-        const summary = sentences[0] + (sentences[1] ? '. ' + sentences[1] : '');
-        noteInput.value = `**Özet:** ${summary.trim()}\n\n---\n\n${text}`;
+        const lower = plainText.toLowerCase();
+        let result = "";
+        let commandFound = false;
+
+        if (lower.includes("özetle") || lower.includes("özet")) {
+            const sentences = plainText.match(/[^.!?]+[.!?]+/g) || [plainText];
+            result = `<strong>Özet:</strong> ${sentences[0].substring(0, 150)}...`;
+            commandFound = true;
+        } else if (lower.includes("çevir")) {
+            result = `<strong>Çeviri (Simülasyon):</strong> Translating... [Lütfen bir API bağlayın]`;
+            commandFound = true;
+        } else if (lower.includes("madde") || lower.includes("listele")) {
+            const words = plainText.replace("listele", "").replace("maddele", "").replace("madde", "").trim().split(" ");
+            result = "<ul>" + words.slice(0, 5).map(w => `<li>${w}</li>`).join('') + "</ul>";
+            commandFound = true;
+        }
+
+        if (!commandFound) {
+            result = `<strong>Serbest AI Analizi (Simüle):</strong> <i>Lütfen komutunuzda 'özetle', 'listele' veya 'çevir' kullanın. Gerçek bir dil modeli (ChatGPT vb.) bağlamadan bu sistem öngörüyle çalışır.</i>`;
+        }
+
+        const separator = "<br>────────────────────<br>";
+        
+        noteInput.innerHTML = result + separator + htmlText;
+        
         updateCharCounter();
-        showStatus('✨ Özet eklendi!');
-    }, 1000);
+        noteInput.scrollTo({ top: 0, behavior: 'smooth' });
+        showStatus(userSettings.lang === 'tr' ? '✨ İşlem tamamlandı!' : '✨ Processing complete!', 'ok');
+    }, 800);
 }
 
 function lockApp() {
@@ -956,9 +977,9 @@ function initSpeechRecognition() {
         if (visualizer) visualizer.classList.add('active'); // Dalgaları göster
         showStatus(TRANSLATIONS[userSettings.lang].statusListening);
         
-        preSpeechText = noteInput.value;
-        if (preSpeechText && !preSpeechText.endsWith(' ')) {
-            preSpeechText += ' ';
+        preSpeechText = noteInput.innerHTML;
+        if (preSpeechText && !preSpeechText.endsWith('&nbsp;')) {
+            preSpeechText += '&nbsp;';
         }
     };
 
@@ -973,16 +994,16 @@ function initSpeechRecognition() {
         }
 
         // Textarea içeriğini güncelle: Başlangıç Metni + Yeni Konuşulanlar
-        noteInput.value = preSpeechText + currentSessionTranscript;
+        noteInput.innerHTML = preSpeechText + currentSessionTranscript;
 
         // Sesli Komut Kontrolü (Sonuç kesinleştiğinde bakıyoruz)
         const lastResult = event.results[event.results.length - 1];
         if (lastResult.isFinal) {
             const lastTranscript = lastResult[0].transcript.toLowerCase();
             if (handleVoiceCommand(lastTranscript)) {
-                // Eğer bir komutsa, textarea'dan bu kısmı temizle (isteğe bağlı)
-                const cmdCleaned = noteInput.value.replace(lastResult[0].transcript, '').trim();
-                noteInput.value = cmdCleaned;
+                // Eğer bir komutsa, bu kısmı temizle
+                const cmdCleaned = noteInput.innerHTML.replace(lastResult[0].transcript, '').trim();
+                noteInput.innerHTML = cmdCleaned;
             }
         }
 
@@ -1040,18 +1061,18 @@ function toggleRecording() {
 // ────────────────────────────────────────
 // Olay Dinleyiciler
 // ────────────────────────────────────────
-addNoteBtn.addEventListener('click', () => addNote(noteInput.value));
+addNoteBtn.addEventListener('click', () => addNote(noteInput.innerHTML));
 voiceBtn.addEventListener('click', toggleRecording);
 mobileFab.addEventListener('click', toggleRecording);
 searchInput.addEventListener('input', renderNotes);
 sortSelect.addEventListener('change', renderNotes);
 exportBtn.addEventListener('click', exportNotes);
-noteInput.addEventListener('input', () => { updateCharCounter(); autoResize(noteInput); });
+noteInput.addEventListener('input', () => { updateCharCounter(); });
 
 noteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        addNote(noteInput.value);
+        addNote(noteInput.innerHTML);
     }
 });
 
