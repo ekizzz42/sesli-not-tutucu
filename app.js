@@ -51,16 +51,25 @@ let userSettings = {
 };
 let recognition = null;
 let isRecording = false;
-let currentEditId = null;
-let preSpeechText = ''; // Kayıt başlamadan önceki mevcut metin
+let currentView      = 'all'; // all, pinned, archived, trash
+let preSpeechText    = ''; 
+let pendingImages     = []; // Yeni eklenen resimler (base64)
+
+const CATEGORIES = {
+    genel: { label_tr: 'Genel', label_en: 'General', icon: '📁' },
+    is: { label_tr: 'İş', label_en: 'Work', icon: '💼' },
+    kisisel: { label_tr: 'Kişisel', label_en: 'Personal', icon: '👤' },
+    fikir: { label_tr: 'Fikir', label_en: 'Idea', icon: '💡' },
+    alisveris: { label_tr: 'Alışveriş', label_en: 'Shopping', icon: '🛒' }
+};
 
 const COLORS = [
-    'rgba(124,77,255,0.15)',
-    'rgba(0,229,255,0.12)',
-    'rgba(255,64,129,0.12)',
-    'rgba(0,200,83,0.12)',
-    'rgba(255,171,64,0.13)',
-    'rgba(33,150,243,0.12)',
+    'rgba(124, 77,255, 0.25)', // Mor
+    'rgba(0, 229, 255, 0.22)', // Turkuaz
+    'rgba(255, 64, 129, 0.22)', // Pembe
+    'rgba(0, 200, 83, 0.22)',  // Yeşil
+    'rgba(255, 171, 64, 0.23)', // Turuncu
+    'rgba(33, 150, 243, 0.22)', // Mavi
 ];
 
 // ────────────────────────────────────────
@@ -104,30 +113,60 @@ function renderNotes() {
     
     notesContainer.innerHTML = '';
 
-    let filtered = notes.filter(n => n.text.toLowerCase().includes(filter));
+    let displayNotes = [];
+    if (currentView === 'trash') {
+        displayNotes = notes.filter(n => n.trash);
+    } else if (currentView === 'archived') {
+        displayNotes = notes.filter(n => n.archived && !n.trash);
+    } else if (currentView === 'pinned') {
+        displayNotes = notes.filter(n => n.pinned && !n.archived && !n.trash);
+    } else {
+        displayNotes = notes.filter(n => !n.archived && !n.trash);
+    }
+
+    let filtered = displayNotes.filter(n => n.text.toLowerCase().includes(filter));
 
     // Sıralama Mantığı
     if (sortVal === 'newest') {
         filtered.sort((a, b) => b.id - a.id);
     } else if (sortVal === 'oldest') {
         filtered.sort((a, b) => a.id - b.id);
-    } else if (sortVal === 'pinned') {
+    } else if (sortVal === 'pinned' && currentView !== 'pinned') {
         filtered.sort((a, b) => {
             if (a.pinned === b.pinned) return b.id - a.id;
             return a.pinned ? -1 : 1;
         });
     }
 
-    // Badge güncelleme
-    if (notes.length > 0) {
-        noteCount.textContent = notes.length;
+    // Nav Badge & Empty State Toggle
+    const activeNotes = notes.filter(n => !n.archived && !n.trash);
+    if (activeNotes.length > 0) {
+        noteCount.textContent = activeNotes.length;
         noteCount.classList.add('visible');
     } else {
         noteCount.classList.remove('visible');
     }
 
+    // Empty State Check
+    const emptyStateText = document.getElementById('emptyStateText');
+    const clearTrashBtn = document.getElementById('clearTrashBtn');
+    
+    // Çöp Kutusu Görünümündeyken "Çöpü Boşalt" Butonunu Göster/Gizle
+    if (currentView === 'trash' && filtered.length > 0) {
+        clearTrashBtn.style.display = 'flex';
+        clearTrashBtn.style.alignItems = 'center';
+        clearTrashBtn.style.justifyContent = 'center';
+        clearTrashBtn.style.gap = '8px';
+    } else {
+        clearTrashBtn.style.display = 'none';
+    }
+
     if (filtered.length === 0) {
         emptyState.classList.add('visible');
+        const t = TRANSLATIONS[userSettings.lang];
+        if (currentView === 'trash') emptyStateText.innerHTML = t.emptyTrash;
+        else if (currentView === 'archived') emptyStateText.innerHTML = t.emptyArchive;
+        else emptyStateText.innerHTML = t.empty;
         return;
     }
     emptyState.classList.remove('visible');
@@ -138,40 +177,60 @@ function renderNotes() {
         card.style.background = COLORS[note.colorIdx % COLORS.length];
         card.style.animationDelay = `${idx * 0.05}s`;
         card.setAttribute('data-id', note.id);
+        card.setAttribute('data-category', note.category || 'genel');
 
         const date = new Date(note.id);
-        const dateStr = date.toLocaleDateString('tr-TR', {
+        const dateStr = date.toLocaleDateString(userSettings.lang === 'tr' ? 'tr-TR' : 'en-US', {
             day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
         });
 
-        // Bu nota ait aktif hatırlatıcı var mı?
+        const cat = CATEGORIES[note.category || 'genel'];
+        const catLabel = userSettings.lang === 'tr' ? cat.label_tr : cat.label_en;
         const reminder = reminders.find(r => r.noteId === note.id && !r.triggered);
         const reminderHtml = reminder ? `
-            <div class="note-reminder-badge" title="${new Date(reminder.time).toLocaleString('tr-TR')}">
-                <i class="fa-solid fa-bell"></i> ${new Date(reminder.time).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}
+            <div class="note-reminder-badge" title="${new Date(reminder.time).toLocaleString()}">
+                <i class="fa-solid fa-bell"></i> ${new Date(reminder.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
             </div>` : '';
 
+        // Basit Markdown-to-HTML (Bold, Italic) ve Resimler
+        let formattedText = escapeHtml(note.text)
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+        const imagesHtml = note.images ? note.images.map(img => `<img src="${img}" loading="lazy">`).join('') : '';
+
         card.innerHTML = `
-            ${note.pinned ? '<div class="note-pinned-badge"><i class="fa-solid fa-thumbtack"></i> Sabitlendi</div>' : ''}
+            <div class="note-category-badge">${cat.icon} ${catLabel}</div>
+            ${note.pinned ? '<div class="note-pinned-badge"><i class="fa-solid fa-thumbtack"></i></div>' : ''}
             ${reminderHtml}
-            <div class="note-content">${escapeHtml(note.text)}</div>
+            <div class="note-content">
+                ${formattedText}
+                ${imagesHtml}
+            </div>
             <div class="note-footer">
-                <span class="note-date">
-                    <i class="fa-regular fa-clock"></i>${dateStr}
-                </span>
+                <span class="note-date"><i class="fa-regular fa-clock"></i>${dateStr}</span>
                 <div class="note-btn-group">
-                    <button class="btn-icon btn-pin ${note.pinned ? 'pinned' : ''}" onclick="togglePin(${note.id})" title="Sabitle">
-                        <i class="fa-solid fa-thumbtack"></i>
-                    </button>
-                    <button class="btn-icon btn-edit" onclick="openEditModal(${note.id})" title="Düzenle">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                    <button class="btn-icon btn-copy" onclick="copyNote(${note.id})" title="Kopyala">
-                        <i class="fa-regular fa-copy"></i>
-                    </button>
-                    <button class="btn-icon btn-delete" onclick="deleteNote(${note.id})" title="Sil">
-                        <i class="fa-regular fa-trash-can"></i>
-                    </button>
+                    ${currentView === 'trash' ? `
+                        <button class="btn-icon btn-copy" onclick="restoreNote(${note.id})" title="Geri Yükle">
+                            <i class="fa-solid fa-trash-arrow-up"></i>
+                        </button>
+                        <button class="btn-icon btn-delete" onclick="permanentDelete(${note.id})" title="Kalıcı Sil">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    ` : `
+                        <button class="btn-icon btn-pin ${note.pinned ? 'pinned' : ''}" onclick="togglePin(${note.id})" title="Sabitle">
+                            <i class="fa-solid fa-thumbtack"></i>
+                        </button>
+                        <button class="btn-icon btn-edit" onclick="openEditModal(${note.id})" title="Düzenle">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="btn-icon btn-copy" onclick="archiveNote(${note.id})" title="${note.archived ? 'Arşivden Çıkar' : 'Arşivle'}">
+                            <i class="fa-solid fa-box-archive"></i>
+                        </button>
+                        <button class="btn-icon btn-delete" onclick="deleteNote(${note.id})" title="Sil">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
+                    `}
                 </div>
             </div>
         `;
@@ -205,10 +264,20 @@ function addNote(text) {
         id: noteId,
         text: text,
         pinned: false,
+        archived: false,
+        trash: false,
+        category: document.getElementById('categoryInput').value,
+        images: [...pendingImages],
         colorIdx: notes.length,
     };
 
     notes.push(note);
+    
+    // Temizlik
+    noteInput.value = '';
+    pendingImages = [];
+    document.getElementById('imagePreview').innerHTML = '';
+    document.getElementById('imagePreview').style.display = 'none';
     
     // Hatırlatıcı komutu kontrolü
     const reminderTime = parseReminderCommand(text);
@@ -307,16 +376,55 @@ function sendNotification(text) {
 setInterval(checkReminders, 10000);
 
 function deleteNote(id) {
-    const card = document.querySelector(`.note-card[data-id="${id}"]`);
-    if (card) {
-        card.style.transform = 'scale(0.8) opacity(0)';
-        card.style.transition = '0.3s';
-        setTimeout(() => {
-            notes = notes.filter(n => n.id !== id);
-            reminders = reminders.filter(r => r.noteId !== id);
-            saveNotes();
-            renderNotes();
-        }, 300);
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        note.trash = true;
+        saveNotes();
+        renderNotes();
+        showStatus('🗑️ Not çöpe taşındı.');
+    }
+}
+
+function archiveNote(id) {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        note.archived = !note.archived;
+        saveNotes();
+        renderNotes();
+        showStatus(note.archived ? '📦 Arşivlendi.' : '📥 Arşivden çıkarıldı.');
+    }
+}
+
+function restoreNote(id) {
+    const note = notes.find(n => n.id === id);
+    if (note) {
+        note.trash = false;
+        saveNotes();
+        renderNotes();
+        showStatus('♻️ Not geri yüklendi.');
+    }
+}
+
+function permanentDelete(id) {
+    if (confirm('Bu notu kalıcı olarak silmek istediğinize emin misiniz?')) {
+        // Sadece notları filtrele, kullanıcı verilerine dokunma
+        notes = notes.filter(n => n.id !== id);
+        reminders = reminders.filter(r => r.noteId !== id);
+        saveNotes();
+        renderNotes();
+        showStatus('🗑️ Not tamamen silindi.');
+    }
+}
+
+function emptyTrash() {
+    if (notes.filter(n => n.trash).length === 0) return;
+    
+    if (confirm('Çöp kutusundaki tüm notlar kalıcı olarak silinecek. Bu işlem geri alınamaz. Onaylıyor musunuz?')) {
+        // Çöpte olmayan (trash: false) notları tut, diğerlerini at
+        notes = notes.filter(n => !n.trash);
+        saveNotes();
+        renderNotes();
+        showStatus('🧹 Çöp kutusu tamamen boşaltıldı.');
     }
 }
 
@@ -423,6 +531,115 @@ function showStatus(msg, type = 'ok') {
     statusMsg._timeout = setTimeout(() => { statusMsg.textContent = ''; }, 3000);
 }
 
+// ────────────────────────────────────────
+// Zengin İçerik (Formatting & Image)
+// ────────────────────────────────────────
+function formatText(type) {
+    const start = noteInput.selectionStart;
+    const end = noteInput.selectionEnd;
+    const text = noteInput.value;
+    const selected = text.substring(start, end);
+    let formatted = "";
+
+    if (type === 'bold') formatted = `**${selected}**`;
+    else if (type === 'italic') formatted = `*${selected}*`;
+
+    noteInput.value = text.substring(0, start) + formatted + text.substring(end);
+    noteInput.focus();
+    updateCharCounter();
+}
+
+function handleVoiceCommand(transcript) {
+    const cmd = transcript.toLowerCase().trim();
+    if (cmd.includes('notu ekle') || cmd.includes('add note')) {
+        addNote(noteInput.value);
+        return true;
+    }
+    if (cmd.includes('gece moduna geç') || cmd.includes('midnight mode')) {
+        applyTheme('midnight');
+        showStatus('🌙 Gece modu aktif.');
+        return true;
+    }
+    if (cmd.includes('ışıkları aç') || cmd.includes('light mode')) {
+        applyTheme('light');
+        showStatus('☀️ Aydınlık mod aktif.');
+        return true;
+    }
+    if (cmd.includes('arşivi aç') || cmd.includes('open archive')) {
+        document.querySelector('[data-view="archived"]').click();
+        return true;
+    }
+    if (cmd.includes('notlarımı göster') || cmd.includes('show my notes')) {
+        document.querySelector('[data-view="all"]').click();
+        return true;
+    }
+    return false;
+}
+
+function aiSummarize() {
+    const text = noteInput.value.trim();
+    if (text.length < 20) {
+        showStatus('⚠️ Özetlemek için metin çok kısa.', 'warn');
+        return;
+    }
+    showStatus('🪄 AI Özetliyor...', 'ok');
+    setTimeout(() => {
+        const sentences = text.split(/[.!?]/);
+        const summary = sentences[0] + (sentences[1] ? '. ' + sentences[1] : '');
+        noteInput.value = `**Özet:** ${summary.trim()}\n\n---\n\n${text}`;
+        updateCharCounter();
+        showStatus('✨ Özet eklendi!');
+    }, 1000);
+}
+
+function lockApp() {
+    if (!currentUser) return; // Giriş yapmamışsa kilitleme
+    document.getElementById('lockOverlay').style.display = 'flex';
+    sessionStorage.setItem('vocalnotes_locked', 'true');
+}
+
+function unlockApp() {
+    const pass = document.getElementById('unlockPass').value;
+    if (pass === currentUser.pass) {
+        document.getElementById('lockOverlay').style.display = 'none';
+        sessionStorage.removeItem('vocalnotes_locked');
+        document.getElementById('unlockPass').value = '';
+    } else {
+        document.getElementById('lockStatus').textContent = '❌ Yanlış Şifre!';
+        setTimeout(() => document.getElementById('lockStatus').textContent = '', 2000);
+    }
+}
+function handleImageSelect(e) {
+    const files = Array.from(e.target.files);
+    const previewContainer = document.getElementById('imagePreview');
+    
+    files.forEach(file => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const base64 = event.target.result;
+            pendingImages.push(base64);
+            
+            const div = document.createElement('div');
+            div.className = 'img-preview-item';
+            div.innerHTML = `
+                <img src="${base64}">
+                <button class="btn-remove" onclick="removePendingImage('${base64}', this)">×</button>
+            `;
+            previewContainer.appendChild(div);
+            previewContainer.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    });
+    e.target.value = ''; // Reset input
+}
+
+window.removePendingImage = (base64, btn) => {
+    pendingImages = pendingImages.filter(img => img !== base64);
+    btn.parentElement.remove();
+    if (pendingImages.length === 0) document.getElementById('imagePreview').style.display = 'none';
+};
+
 function refreshApp() {
     showStatus('⏳ Güncelleniyor...', 'ok');
     if ('serviceWorker' in navigator) {
@@ -440,16 +657,26 @@ function refreshApp() {
 // Kimlik Doğrulama (Auth)
 // ────────────────────────────────────────
 function checkAuth() {
-    const session = localStorage.getItem('vocalnotes_user');
-    if (session) {
-        currentUser = JSON.parse(session);
-        authOverlay.style.display = 'none';
-        currentUserName.textContent = currentUser.name;
-        loadNotes();
-        renderNotes();
-    } else {
-        authOverlay.style.display = 'flex';
+    try {
+        const session = localStorage.getItem('vocalnotes_user');
+        if (session) {
+            const parsed = JSON.parse(session);
+            if (parsed && parsed.id && parsed.name) {
+                currentUser = parsed;
+                authOverlay.style.display = 'none';
+                currentUserName.textContent = currentUser.name;
+                loadNotes();
+                renderNotes();
+                return;
+            }
+        }
+    } catch (e) {
+        console.error("Auth check error:", e);
     }
+    
+    // session yoksa veya geçersizse overlay'i göster
+    authOverlay.style.display = 'flex';
+    currentUser = null;
 }
 
 function showAuthStatus(msg, type = 'ok') {
@@ -462,19 +689,80 @@ function showAuthStatus(msg, type = 'ok') {
 }
 
 function login(username, password) {
-    const users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
-    const user = users.find(u => u.name.toLowerCase() === username.toLowerCase() && u.pass === password);
+    if (!username || !password) return;
+    username = username.trim();
+    password = password.trim();
+
+    let users = [];
+    try {
+        users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
+    } catch(e) {
+        console.error("Database error:", e);
+    }
     
-    if (user) {
-        localStorage.setItem('vocalnotes_user', JSON.stringify(user));
-        checkAuth();
-        showStatus('👋 Hoş geldin, ' + user.name);
+    const user = users.find(u => u.name.trim().toLowerCase() === username.toLowerCase());
+    
+    if (!user) {
+        showAuthStatus('❌ Kullanıcı bulunamadı.', 'warn');
+        // DETEKTİF MODU: Diğer anahtarlara da bak
+        scanAllForUsernames(username);
+        return;
+    }
+
+    if (user.pass.trim() !== password) {
+        showAuthStatus('❌ Şifre hatalı.', 'warn');
+        return;
+    }
+    
+    localStorage.setItem('vocalnotes_user', JSON.stringify(user));
+    checkAuth();
+    showStatus('👋 Hoş geldin, ' + user.name);
+}
+
+function scanAllForUsernames() {
+    const hintDiv = document.getElementById('registeredUsersHint');
+    const userSpan = document.getElementById('userListHint');
+    let allFoundNames = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        try {
+            const val = JSON.parse(localStorage.getItem(key));
+            if (Array.isArray(val)) {
+                val.forEach(item => { if (item.name) allFoundNames.push(item.name); });
+            } else if (val && val.name) {
+                allFoundNames.push(val.name);
+            }
+        } catch(e) {}
+    }
+
+    if (allFoundNames.length > 0) {
+        const uniqueNames = [...new Set(allFoundNames)];
+        userSpan.textContent = uniqueNames.join(', ');
+        hintDiv.style.display = 'block';
     } else {
-        showAuthStatus('❌ Hatalı kullanıcı adı veya şifre.', 'warn');
+        showAuthStatus('❌ Hiç kayıtlı kullanıcı yok. Lütfen kayıt olun.', 'warn');
+    }
+}
+
+function togglePassVisibility(id, icon) {
+    const input = document.getElementById(id);
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
     }
 }
 
 function register(username, password) {
+    if (!username || !password) return;
+    username = username.trim();
+    password = password.trim();
+
     if (username.length < 3) {
         showAuthStatus('⚠️ Kullanıcı adı en az 3 karakter olmalı.', 'warn');
         return;
@@ -499,7 +787,7 @@ function register(username, password) {
     // Otomatik Giriş
     setTimeout(() => {
         login(username, password);
-    }, 1500);
+    }, 1200);
 }
 
 function logout() {
@@ -541,7 +829,13 @@ const TRANSLATIONS = {
         sortOld: "En Eski",
         sortPinned: "Sabitlenmiş",
         updateBtn: "Uygulamayı Güncelle/Yenile",
-        updateAvailable: "Yeni sürüm hazır! Yenilemek için tıklayın."
+        updateAvailable: "Yeni sürüm hazır! Yenilemek için tıklayın.",
+        emptyArchive: "Arşivlenmiş notun yok.",
+        emptyTrash: "Çöp kutusu boş.",
+        navAll: "Tümü",
+        navPinned: "Sabitler",
+        navArchived: "Arşiv",
+        navTrash: "Çöp Kutusu"
     },
     en: {
         subtitle: "Speak or type your thoughts, we keep them safe.",
@@ -572,7 +866,13 @@ const TRANSLATIONS = {
         sortOld: "Oldest",
         sortPinned: "Pinned",
         updateBtn: "Update/Refresh App",
-        updateAvailable: "New version ready! Click to refresh."
+        updateAvailable: "New version ready! Click to refresh.",
+        emptyArchive: "No archived notes.",
+        emptyTrash: "Trash is empty.",
+        navAll: "All",
+        navPinned: "Pinned",
+        navArchived: "Archive",
+        navTrash: "Trash"
     }
 };
 
@@ -600,9 +900,26 @@ function applyLanguage(lang) {
     sortSelect.options[0].textContent = t.sortNew;
     sortSelect.options[2].textContent = t.sortPinned;
     document.getElementById('lblUpdateApp').textContent = t.updateBtn;
+    
+    // Nav Labels
+    const navBtns = document.querySelectorAll('.nav-btn');
+    navBtns[0].querySelector('span').textContent = t.navAll;
+    navBtns[1].querySelector('span').textContent = t.navPinned;
+    navBtns[2].querySelector('span').textContent = t.navArchived;
+    navBtns[3].querySelector('span').textContent = t.navTrash;
 
     langSelect.value = lang;
     
+    // Kategori Dropdown Çevirisi
+    const catSelect = document.getElementById('categoryInput');
+    if (catSelect) {
+        catSelect.options[0].textContent = lang === 'tr' ? '📁 Genel' : '📁 General';
+        catSelect.options[1].textContent = lang === 'tr' ? '💼 İş' : '💼 Work';
+        catSelect.options[2].textContent = lang === 'tr' ? '👤 Kişisel' : '👤 Personal';
+        catSelect.options[3].textContent = lang === 'tr' ? '💡 Fikir' : '💡 Idea';
+        catSelect.options[4].textContent = lang === 'tr' ? '🛒 Alışveriş' : '🛒 Shopping';
+    }
+
     // Update recognition if active
     if (recognition) {
         recognition.lang = lang === 'tr' ? 'tr-TR' : 'en-US';
@@ -658,8 +975,18 @@ function initSpeechRecognition() {
         // Textarea içeriğini güncelle: Başlangıç Metni + Yeni Konuşulanlar
         noteInput.value = preSpeechText + currentSessionTranscript;
 
-        // Son parça ara sonuç mu? (Durum çubuğunda göstermek için)
+        // Sesli Komut Kontrolü (Sonuç kesinleştiğinde bakıyoruz)
         const lastResult = event.results[event.results.length - 1];
+        if (lastResult.isFinal) {
+            const lastTranscript = lastResult[0].transcript.toLowerCase();
+            if (handleVoiceCommand(lastTranscript)) {
+                // Eğer bir komutsa, textarea'dan bu kısmı temizle (isteğe bağlı)
+                const cmdCleaned = noteInput.value.replace(lastResult[0].transcript, '').trim();
+                noteInput.value = cmdCleaned;
+            }
+        }
+
+        // Son parça ara sonuç mu? (Durum çubuğunda göstermek için)
         if (lastResult && !lastResult.isFinal) {
             showStatus(`🎙️ ${lastResult[0].transcript}`);
         }
@@ -801,25 +1128,113 @@ toLogin.addEventListener('click', (e) => {
 
 loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    login(document.getElementById('loginUser').value, document.getElementById('loginPass').value);
+    const u = document.getElementById('loginUser').value;
+    const p = document.getElementById('loginPass').value;
+    login(u, p);
 });
 
 registerForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    register(document.getElementById('regUser').value, document.getElementById('regPass').value);
+    const u = document.getElementById('regUser').value;
+    const p = document.getElementById('regPass').value;
+    register(u, p);
 });
 
 logoutBtn.addEventListener('click', logout);
 updateAppBtn.addEventListener('click', refreshApp);
 
-// ────────────────────────────────────────
-// Başlat
-// ────────────────────────────────────────
+// Navigation Events
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentView = btn.dataset.view;
+        renderNotes();
+    });
+});
+
+document.getElementById('clearTrashBtn').addEventListener('click', emptyTrash);
+
+// Phase 2 Events
+document.querySelectorAll('.btn-format').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (btn.dataset.format) formatText(btn.dataset.format);
+    });
+});
+
+document.getElementById('imgUploadBtn').addEventListener('click', () => {
+    document.getElementById('imageInput').click();
+});
+
+document.getElementById('imageInput').addEventListener('change', handleImageSelect);
+document.getElementById('aiSummarizeBtn').addEventListener('click', aiSummarize);
+document.getElementById('lockAppBtn').addEventListener('click', () => {
+    settingsModal.style.display = 'none';
+    lockApp();
+});
+document.getElementById('unlockBtn').addEventListener('click', unlockApp);
+document.getElementById('unlockPass').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') unlockApp();
+});
+
 checkAuth();
 initSpeechRecognition();
+
+// Otomatik Kilit Kontrolü
+if (currentUser && sessionStorage.getItem('vocalnotes_locked')) lockApp();
 
 // Global Fonksiyonlar (inline onclick için)
 window.deleteNote = deleteNote;
 window.copyNote = copyNote;
 window.togglePin = togglePin;
 window.openEditModal = openEditModal;
+window.archiveNote = archiveNote;
+window.restoreNote = restoreNote;
+window.permanentDelete = permanentDelete;
+window.emptyTrash = emptyTrash;
+
+window.discoverAllUserData = function() {
+    console.log("Discovery started...");
+    const hintDiv = document.getElementById('registeredUsersHint');
+    const userSpan = document.getElementById('userListHint');
+    const statusDiv = document.getElementById('authStatus');
+    let allFound = [];
+
+    if (statusDiv) {
+        statusDiv.textContent = '🔍 Hafıza taranıyor...';
+        statusDiv.style.color = '#00e5ff';
+    }
+
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const raw = localStorage.getItem(key);
+            console.log("Checking key:", key);
+            try {
+                const val = JSON.parse(raw);
+                if (Array.isArray(val)) {
+                    val.forEach(item => { if (item.name) allFound.push({ name: item.name, source: key }); });
+                } else if (val && val.name) {
+                    allFound.push({ name: val.name, source: key });
+                }
+            } catch(e) {
+                // Ham metin kontrolü
+                if (raw && (key.toLowerCase().includes('user') || key.toLowerCase().includes('vocal'))) {
+                    allFound.push({ name: "Gizli Kayıt (" + key + ")", source: key });
+                }
+            }
+        }
+    } catch (globalErr) {
+        console.error("Discovery error:", globalErr);
+        if (statusDiv) statusDiv.textContent = '❌ Tarama hatası oluştu.';
+    }
+
+    if (allFound.length > 0) {
+        const uniqueNames = [...new Set(allFound.map(f => f.name))];
+        userSpan.textContent = uniqueNames.join(', ');
+        hintDiv.style.display = 'block';
+        if (statusDiv) statusDiv.textContent = '✅ ' + uniqueNames.length + ' hesap bulundu!';
+    } else {
+        if (statusDiv) statusDiv.textContent = '❌ Hiçbir eski kayıt bulunamadı.';
+    }
+}

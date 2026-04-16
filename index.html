@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VocalNotes - Sesli Not Tutucu</title>
+    <title>VocalNotes - Productivity Suite</title>
     <meta name="description" content="Ses komutu ve manuel yazma ile hızlıca not tutun. Modern ve şık tasarımıyla en iyi not tutma deneyimi.">
     <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
@@ -33,32 +33,42 @@
 
             <!-- Login Form -->
             <form id="loginForm" class="auth-form">
-                <h3>Giriş Yap</h3>
+                <h3>Login</h3>
                 <div class="input-group">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" id="loginUser" placeholder="Kullanıcı Adı" required>
+                    <input type="text" id="loginUser" placeholder="Username" required>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-lock"></i>
-                    <input type="password" id="loginPass" placeholder="Şifre" required>
+                    <input type="password" id="loginPass" placeholder="Password" required>
+                    <i class="fa-solid fa-eye toggle-pass" onclick="togglePassVisibility('loginPass', this)"></i>
                 </div>
-                <button type="submit" class="btn-primary w-full">Giriş Yap</button>
-                <p class="auth-footer">Hesabın yok mu? <a href="#" id="toRegister">Kayıt Ol</a></p>
+                <button type="submit" class="btn-primary w-full">Login</button>
+                <div id="registeredUsersHint" style="margin-top:1rem; font-size:0.8rem; color:var(--text-muted); display:none;">
+                    💡 Registered users: <span id="userListHint"></span>
+                </div>
+                <div id="accountRecoveryArea" style="margin-top:1rem; text-align:center;">
+                    <button type="button" onclick="discoverAllUserData()" class="btn-link" style="font-size:0.8rem; color:var(--accent); background:none; border:none; cursor:pointer; text-decoration:underline;">
+                        Find My Lost Account (Recovery Mode)
+                    </button>
+                </div>
+                <p class="auth-footer">Don't have an account? <a href="#" id="toRegister">Register</a></p>
             </form>
 
             <!-- Register Form -->
             <form id="registerForm" class="auth-form" style="display:none;">
-                <h3>Kayıt Ol</h3>
+                <h3>Register</h3>
                 <div class="input-group">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" id="regUser" placeholder="Kullanıcı Adı" required>
+                    <input type="text" id="regUser" placeholder="Username" required>
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-lock"></i>
-                    <input type="password" id="regPass" placeholder="Şifre" required>
+                    <input type="password" id="regPass" placeholder="Password" required>
+                    <i class="fa-solid fa-eye toggle-pass" onclick="togglePassVisibility('regPass', this)"></i>
                 </div>
-                <button type="submit" class="btn-primary w-full">Kayıt Ol</button>
-                <p class="auth-footer">Zaten hesabın var mı? <a href="#" id="toLogin">Giriş Yap</a></p>
+                <button type="submit" class="btn-primary w-full">Register</button>
+                <p class="auth-footer">Already have an account? <a href="#" id="toLogin">Login</a></p>
             </form>
         </div>
     </div>
@@ -95,17 +105,33 @@
         <section class="input-section">
             <div class="input-card glass">
                 <div class="input-wrapper">
+                    <!-- Format Toolbar -->
+                    <div class="format-toolbar">
+                        <button type="button" class="btn-format" data-format="bold" title="Kalın"><i class="fa-solid fa-bold"></i></button>
+                        <button type="button" class="btn-format" data-format="italic" title="İtalik"><i class="fa-solid fa-italic"></i></button>
+                        <button type="button" id="imgUploadBtn" class="btn-format" title="Fotoğraf Ekle"><i class="fa-solid fa-image"></i></button>
+                        <button type="button" id="aiSummarizeBtn" class="btn-format" title="AI ile Özetle"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+                        <input type="file" id="imageInput" accept="image/*" style="display:none;">
+                    </div>
                     <textarea id="noteInput" placeholder="Notunuzu buraya yazın veya mikrofonu kullanın..." rows="3"></textarea>
+                    <div id="imagePreview" class="image-preview-container" style="display:none;"></div>
                     <div class="char-counter" id="charCounter">0 karakter</div>
                     <div class="input-actions">
                         <div id="visualizer" class="recording-visualizer">
                             <span></span><span></span><span></span><span></span><span></span>
                         </div>
-                        <button id="voiceBtn" class="btn-voice" title="Sesle Yaz" aria-label="Sesle not ekle">
+                        <select id="categoryInput" class="category-select glass">
+                            <option value="genel">📁 General</option>
+                            <option value="is">💼 Work</option>
+                            <option value="kisisel">👤 Personal</option>
+                            <option value="fikir">💡 Idea</option>
+                            <option value="alisveris">🛒 Shopping</option>
+                        </select>
+                        <button id="voiceBtn" class="btn-voice" title="Sesle Yaz">
                             <i class="fa-solid fa-microphone"></i>
                             <span class="pulse"></span>
                         </button>
-                        <button id="addNoteBtn" class="btn-primary" aria-label="Not ekle">
+                        <button id="addNoteBtn" class="btn-primary">
                             <i class="fa-solid fa-plus"></i>
                             <span>Ekle</span>
                         </button>
@@ -114,6 +140,26 @@
                 <div id="statusMessage" class="status-message" aria-live="polite"></div>
             </div>
         </section>
+
+        <!-- NAVIGATION TABS -->
+        <nav class="app-nav glass">
+            <button class="nav-btn active" data-view="all">
+                <i class="fa-solid fa-note-sticky"></i>
+                <span>All</span>
+            </button>
+            <button class="nav-btn" data-view="pinned">
+                <i class="fa-solid fa-thumbtack"></i>
+                <span>Pinned</span>
+            </button>
+            <button class="nav-btn" data-view="archived">
+                <i class="fa-solid fa-box-archive"></i>
+                <span>Archive</span>
+            </button>
+            <button class="nav-btn" data-view="trash">
+                <i class="fa-solid fa-trash-can"></i>
+                <span>Trash Bin</span>
+            </button>
+        </nav>
 
         <!-- NOTES -->
         <section class="notes-section">
@@ -141,8 +187,12 @@
 
             <div id="emptyState" class="empty-state">
                 <i class="fa-regular fa-note-sticky"></i>
-                <p>Henüz hiç notun yok.<br>İlkini eklemeye ne dersin?</p>
+                <p id="emptyStateText">Henüz hiç notun yok.<br>İlkini eklemeye ne dersin?</p>
+                <button id="clearTrashBtn" class="btn-secondary" style="display:none; margin: 1rem auto;">
+                    <i class="fa-solid fa-broom"></i> Çöpü Boşalt
+                </button>
             </div>
+        </section>
         </section>
     </main>
 
@@ -217,6 +267,13 @@
                 </div>
 
                 <div class="setting-item">
+                    <button id="lockAppBtn" class="btn-secondary w-full">
+                        <i class="fa-solid fa-lock"></i> <span>Uygulamayı Kilitle</span>
+                    </button>
+                    <p class="setting-desc">Cihazınızı başkasına verdiğinizde şifreli koruma sağlar.</p>
+                </div>
+
+                <div class="setting-item">
                     <button id="updateAppBtn" class="btn-secondary w-full" style="color: var(--accent); border-color: var(--accent);">
                         <i class="fa-solid fa-rotate"></i> <span id="lblUpdateApp">Uygulamayı Güncelle/Yenile</span>
                     </button>
@@ -229,6 +286,23 @@
                     <i class="fa-solid fa-check"></i> <span id="lblDone">Tamam</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- App Lock Overlay -->
+    <div id="lockOverlay" class="auth-overlay" style="display:none; backdrop-filter: blur(20px); z-index: 3000;">
+        <div class="auth-card glass shadow-lg">
+            <div class="auth-header">
+                <i class="fa-solid fa-shield-halved"></i>
+                <h2>VocalNotes</h2>
+                <p>Güvenli Oturum</p>
+            </div>
+            <div id="lockStatus" class="status-message" style="margin-bottom:1rem;"></div>
+            <div class="input-group">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="unlockPass" placeholder="Şifrenizi Girin">
+            </div>
+            <button id="unlockBtn" class="btn-primary w-full">Kilidi Aç</button>
         </div>
     </div>
 
