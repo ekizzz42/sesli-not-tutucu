@@ -174,10 +174,9 @@ function renderNotes() {
     filtered.forEach((note, idx) => {
         const card = document.createElement('div');
         card.className = `note-card glass ${note.pinned ? 'is-pinned' : ''}`;
-        card.style.background = COLORS[note.colorIdx % COLORS.length];
-        card.style.animationDelay = `${idx * 0.05}s`;
-        card.setAttribute('data-id', note.id);
-        card.setAttribute('data-category', note.category || 'genel');
+        const isGeneral = (note.category || 'genel') === 'genel';
+        const textColor = isGeneral ? '#000000' : '#ffffff';
+        const cardBg = isGeneral ? '#f1f5f9' : COLORS[note.colorIdx % COLORS.length];
 
         const date = new Date(note.id);
         const dateStr = date.toLocaleDateString(userSettings.lang === 'tr' ? 'tr-TR' : 'en-US', {
@@ -192,23 +191,24 @@ function renderNotes() {
                 <i class="fa-solid fa-bell"></i> ${new Date(reminder.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
             </div>` : '';
 
-        // Basit Markdown-to-HTML (Bold, Italic) ve Resimler
         let formattedText = escapeHtml(note.text)
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>');
 
         const imagesHtml = note.images ? note.images.map(img => `<img src="${img}" loading="lazy">`).join('') : '';
 
+        card.style.background = cardBg;
+
         card.innerHTML = `
-            <div class="note-category-badge">${cat.icon} ${catLabel}</div>
+            <div class="note-category-badge" style="color: ${isGeneral ? '#000000' : '#ffffff'}">${cat.icon} ${catLabel}</div>
             ${note.pinned ? '<div class="note-pinned-badge"><i class="fa-solid fa-thumbtack"></i></div>' : ''}
             ${reminderHtml}
-            <div class="note-content">
+            <div class="note-content" style="color: ${textColor} !important;">
                 ${formattedText}
                 ${imagesHtml}
             </div>
             <div class="note-footer">
-                <span class="note-date"><i class="fa-regular fa-clock"></i>${dateStr}</span>
+                <span class="note-date" style="color: ${isGeneral ? '#444444' : 'rgba(255,255,255,0.8)'}"><i class="fa-regular fa-clock"></i>${dateStr}</span>
                 <div class="note-btn-group">
                     ${currentView === 'trash' ? `
                         <button class="btn-icon btn-copy" onclick="restoreNote(${note.id})" title="Geri Yükle">
@@ -218,16 +218,16 @@ function renderNotes() {
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     ` : `
-                        <button class="btn-icon btn-pin ${note.pinned ? 'pinned' : ''}" onclick="togglePin(${note.id})" title="Sabitle">
+                        <button class="btn-icon btn-pin ${note.pinned ? 'pinned' : ''}" onclick="togglePin(${note.id})" title="Sabitle" style="color: ${isGeneral && !note.pinned ? '#444444' : ''}">
                             <i class="fa-solid fa-thumbtack"></i>
                         </button>
-                        <button class="btn-icon btn-edit" onclick="openEditModal(${note.id})" title="Düzenle">
+                        <button class="btn-icon btn-edit" onclick="openEditModal(${note.id})" title="Düzenle" style="color: ${isGeneral ? '#444444' : ''}">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button class="btn-icon btn-copy" onclick="archiveNote(${note.id})" title="${note.archived ? 'Arşivden Çıkar' : 'Arşivle'}">
+                        <button class="btn-icon btn-copy" onclick="archiveNote(${note.id})" title="${note.archived ? 'Arşivden Çıkar' : 'Arşivle'}" style="color: ${isGeneral ? '#444444' : ''}">
                             <i class="fa-solid fa-box-archive"></i>
                         </button>
-                        <button class="btn-icon btn-delete" onclick="deleteNote(${note.id})" title="Sil">
+                        <button class="btn-icon btn-delete" onclick="deleteNote(${note.id})" title="Sil" style="color: ${isGeneral ? '#444444' : ''}">
                             <i class="fa-regular fa-trash-can"></i>
                         </button>
                     `}
@@ -1128,9 +1128,15 @@ toLogin.addEventListener('click', (e) => {
 
 loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const u = document.getElementById('loginUser').value;
-    const p = document.getElementById('loginPass').value;
-    login(u, p);
+    const uInput = document.getElementById('loginUser');
+    const pInput = document.getElementById('loginPass');
+    
+    if (uInput && pInput) {
+        console.log("Login attempt for:", uInput.value);
+        login(uInput.value, pInput.value);
+    } else {
+        console.error("Login inputs missing from DOM!");
+    }
 });
 
 registerForm.addEventListener('submit', (e) => {

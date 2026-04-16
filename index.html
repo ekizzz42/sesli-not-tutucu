@@ -20,7 +20,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
 </head>
-<body>
+<body style="background-color: #0f172a !important; color: #f8fafc !important;">
     <div id="authOverlay" class="auth-overlay">
         <div class="auth-card glass shadow-lg">
             <div class="auth-header">
@@ -36,14 +36,14 @@
                 <h3>Login</h3>
                 <div class="input-group">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" id="loginUser" placeholder="Username" required>
+                    <input type="text" id="loginUser" placeholder="Username" required onkeypress="if(event.key==='Enter') document.getElementById('manualLoginBtn').click();">
                 </div>
                 <div class="input-group">
                     <i class="fa-solid fa-lock"></i>
-                    <input type="password" id="loginPass" placeholder="Password" required>
+                    <input type="password" id="loginPass" placeholder="Password" required onkeypress="if(event.key==='Enter') document.getElementById('manualLoginBtn').click();">
                     <i class="fa-solid fa-eye toggle-pass" onclick="togglePassVisibility('loginPass', this)"></i>
                 </div>
-                <button type="submit" class="btn-primary w-full">Login</button>
+                <button type="button" class="btn-primary w-full" id="manualLoginBtn" style="position:relative; z-index:9999; pointer-events:auto;" onclick="const u=document.getElementById('loginUser').value; const p=document.getElementById('loginPass').value; login(u,p);">Login</button>
                 <div id="registeredUsersHint" style="margin-top:1rem; font-size:0.8rem; color:var(--text-muted); display:none;">
                     💡 Registered users: <span id="userListHint"></span>
                 </div>
