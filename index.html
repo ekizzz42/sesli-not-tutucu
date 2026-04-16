@@ -28,6 +28,9 @@
                 <h2>VocalNotes</h2>
             </div>
             
+            <!-- Auth Status Message -->
+            <div id="authStatus" class="status-message" style="margin-bottom: 1rem; text-align: center;"></div>
+
             <!-- Login Form -->
             <form id="loginForm" class="auth-form">
                 <h3>Giriş Yap</h3>
@@ -190,6 +193,7 @@
                 </div>
 
                 <div class="setting-item">
+                    <label><i class="fa-solid fa-palette"></i> <span id="lblTheme">Görünüm</span></label>
                     <div class="theme-grid">
                         <button class="theme-btn active" data-theme="dark" title="Dark">
                             <span class="theme-preview dark"></span>
@@ -210,6 +214,13 @@
                         <option value="en">English</option>
                     </select>
                     <p class="setting-desc" id="lblLangDesc">Ses tanıma dili seçilen dile göre ayarlanır.</p>
+                </div>
+
+                <div class="setting-item">
+                    <button id="updateAppBtn" class="btn-secondary w-full" style="color: var(--accent); border-color: var(--accent);">
+                        <i class="fa-solid fa-rotate"></i> <span id="lblUpdateApp">Uygulamayı Güncelle/Yenile</span>
+                    </button>
+                    <p class="setting-desc">Belleği temizler ve en son sürümü yükler.</p>
                 </div>
             </div>
 

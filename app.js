@@ -30,6 +30,7 @@ const closeSettingsFull = document.getElementById('closeSettingsBtn');
 const langSelect      = document.getElementById('langSelect');
 const themeButtons    = document.querySelectorAll('.theme-btn');
 const visualizer      = document.getElementById('visualizer');
+const updateAppBtn    = document.getElementById('updateAppBtn');
 
 // Auth Elements
 const authOverlay     = document.getElementById('authOverlay');
@@ -39,6 +40,7 @@ const toRegister      = document.getElementById('toRegister');
 const toLogin         = document.getElementById('toLogin');
 const currentUserName = document.getElementById('currentUserName');
 const logoutBtn       = document.getElementById('logoutBtn');
+const authStatus      = document.getElementById('authStatus');
 
 let notes = [];
 let reminders = [];
@@ -421,11 +423,24 @@ function showStatus(msg, type = 'ok') {
     statusMsg._timeout = setTimeout(() => { statusMsg.textContent = ''; }, 3000);
 }
 
+function refreshApp() {
+    showStatus('⏳ Güncelleniyor...', 'ok');
+    if ('serviceWorker' in navigator) {
+        caches.keys().then((names) => {
+            for (let name of names) caches.delete(name);
+        }).then(() => {
+            location.reload(true);
+        });
+    } else {
+        location.reload(true);
+    }
+}
+
 // ────────────────────────────────────────
 // Kimlik Doğrulama (Auth)
 // ────────────────────────────────────────
 function checkAuth() {
-    const session = sessionStorage.getItem('vocalnotes_user');
+    const session = localStorage.getItem('vocalnotes_user');
     if (session) {
         currentUser = JSON.parse(session);
         authOverlay.style.display = 'none';
@@ -437,23 +452,41 @@ function checkAuth() {
     }
 }
 
+function showAuthStatus(msg, type = 'ok') {
+    if (authStatus) {
+        authStatus.textContent = msg;
+        authStatus.style.color = type === 'warn' ? 'var(--warn)' : 'var(--accent)';
+        clearTimeout(authStatus._timeout);
+        authStatus._timeout = setTimeout(() => { authStatus.textContent = ''; }, 4000);
+    }
+}
+
 function login(username, password) {
     const users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
-    const user = users.find(u => u.name === username && u.pass === password);
+    const user = users.find(u => u.name.toLowerCase() === username.toLowerCase() && u.pass === password);
     
     if (user) {
-        sessionStorage.setItem('vocalnotes_user', JSON.stringify(user));
+        localStorage.setItem('vocalnotes_user', JSON.stringify(user));
         checkAuth();
-        showStatus('👋 Hoş geldin, ' + username);
+        showStatus('👋 Hoş geldin, ' + user.name);
     } else {
-        showStatus('❌ Hatalı kullanıcı adı veya şifre.', 'warn');
+        showAuthStatus('❌ Hatalı kullanıcı adı veya şifre.', 'warn');
     }
 }
 
 function register(username, password) {
+    if (username.length < 3) {
+        showAuthStatus('⚠️ Kullanıcı adı en az 3 karakter olmalı.', 'warn');
+        return;
+    }
+    if (password.length < 4) {
+        showAuthStatus('⚠️ Şifre en az 4 karakter olmalı.', 'warn');
+        return;
+    }
+
     const users = JSON.parse(localStorage.getItem('vocalnotes_users') || '[]');
-    if (users.find(u => u.name === username)) {
-        showStatus('⚠️ Bu kullanıcı adı zaten alınmış.', 'warn');
+    if (users.find(u => u.name.toLowerCase() === username.toLowerCase())) {
+        showAuthStatus('⚠️ Bu kullanıcı adı zaten alınmış.', 'warn');
         return;
     }
     
@@ -461,14 +494,18 @@ function register(username, password) {
     users.push(newUser);
     localStorage.setItem('vocalnotes_users', JSON.stringify(users));
     
-    showStatus('✅ Kayıt başarılı! Giriş yapabilirsiniz.');
-    toLogin.click(); // Giriş ekranına dön
+    showAuthStatus('✅ Kayıt başarılı! Giriş yapılıyor...', 'ok');
+    
+    // Otomatik Giriş
+    setTimeout(() => {
+        login(username, password);
+    }, 1500);
 }
 
 function logout() {
-    sessionStorage.removeItem('vocalnotes_user');
+    localStorage.removeItem('vocalnotes_user');
     currentUser = null;
-    location.reload(); // Temiz bir başlangıç için sayfayı yenile
+    location.reload(); 
 }
 
 // ────────────────────────────────────────
@@ -487,6 +524,7 @@ const TRANSLATIONS = {
         save: "Kaydet",
         cancel: "İptal",
         settings: "Ayarlar",
+        userAccount: "Hesap",
         themeName: "Görünüm",
         langName: "Dil Seçeneği",
         langDesc: "Ses tanıma dili seçilen dile göre ayarlanır.",
@@ -501,7 +539,9 @@ const TRANSLATIONS = {
         statusNetWarn: "⚠️ Ağ bağlantısı hatası.",
         sortNew: "En Yeni",
         sortOld: "En Eski",
-        sortPinned: "Sabitlenmiş"
+        sortPinned: "Sabitlenmiş",
+        updateBtn: "Uygulamayı Güncelle/Yenile",
+        updateAvailable: "Yeni sürüm hazır! Yenilemek için tıklayın."
     },
     en: {
         subtitle: "Speak or type your thoughts, we keep them safe.",
@@ -515,6 +555,7 @@ const TRANSLATIONS = {
         save: "Save",
         cancel: "Cancel",
         settings: "Settings",
+        userAccount: "Account",
         themeName: "Appearance",
         langName: "Language",
         langDesc: "Speech recognition language is set based on this choice.",
@@ -529,7 +570,9 @@ const TRANSLATIONS = {
         statusNetWarn: "⚠️ Network connection error.",
         sortNew: "Newest",
         sortOld: "Oldest",
-        sortPinned: "Pinned"
+        sortPinned: "Pinned",
+        updateBtn: "Update/Refresh App",
+        updateAvailable: "New version ready! Click to refresh."
     }
 };
 
@@ -547,6 +590,7 @@ function applyLanguage(lang) {
     document.getElementById('lblSave').textContent = t.save;
     document.getElementById('cancelEdit').textContent = t.cancel;
     document.getElementById('lblSettings').textContent = t.settings;
+    document.getElementById('lblUserAccount').textContent = t.userAccount;
     document.getElementById('lblTheme').textContent = t.themeName;
     document.getElementById('lblLanguage').textContent = t.langName;
     document.getElementById('lblLangDesc').textContent = t.langDesc;
@@ -554,8 +598,8 @@ function applyLanguage(lang) {
 
     // Sort options
     sortSelect.options[0].textContent = t.sortNew;
-    sortSelect.options[1].textContent = t.sortOld;
     sortSelect.options[2].textContent = t.sortPinned;
+    document.getElementById('lblUpdateApp').textContent = t.updateBtn;
 
     langSelect.value = lang;
     
@@ -728,7 +772,17 @@ themeButtons.forEach(btn => {
 // Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        showStatus(TRANSLATIONS[userSettings.lang].updateAvailable, 'ok');
+                        setTimeout(() => { if(confirm(TRANSLATIONS[userSettings.lang].updateAvailable)) refreshApp(); }, 1000);
+                    }
+                });
+            });
+        }).catch(() => {});
     });
 }
 
@@ -756,6 +810,7 @@ registerForm.addEventListener('submit', (e) => {
 });
 
 logoutBtn.addEventListener('click', logout);
+updateAppBtn.addEventListener('click', refreshApp);
 
 // ────────────────────────────────────────
 // Başlat
