@@ -570,7 +570,7 @@ function handleVoiceCommand(transcript) {
     return false;
 }
 
-function aiSummarize() {
+async function aiSummarize() {
     const htmlText = noteInput.innerHTML;
     const plainText = noteInput.innerText.trim();
     
@@ -581,36 +581,71 @@ function aiSummarize() {
 
     showStatus(userSettings.lang === 'tr' ? '🪄 AI İşlem Yapıyor...' : '🪄 AI Processing...', 'ok');
     
-    setTimeout(() => {
-        const lower = plainText.toLowerCase();
-        let result = "";
-        let commandFound = false;
+    const aiBtn = document.getElementById('aiSummarizeBtn');
+    if (aiBtn) aiBtn.style.pointerEvents = 'none';
 
-        if (lower.includes("özetle") || lower.includes("özet")) {
-            const sentences = plainText.match(/[^.!?]+[.!?]+/g) || [plainText];
-            result = `<strong>Özet:</strong> ${sentences[0].substring(0, 150)}...`;
-            commandFound = true;
-        } else if (lower.includes("çevir")) {
-            result = `<strong>Çeviri (Simülasyon):</strong> Translating... [Lütfen bir API bağlayın]`;
-            commandFound = true;
-        } else if (lower.includes("madde") || lower.includes("listele")) {
-            const words = plainText.replace("listele", "").replace("maddele", "").replace("madde", "").trim().split(" ");
-            result = "<ul>" + words.slice(0, 5).map(w => `<li>${w}</li>`).join('') + "</ul>";
-            commandFound = true;
-        }
-
-        if (!commandFound) {
-            result = `<strong>Serbest AI Analizi (Simüle):</strong> <i>Lütfen komutunuzda 'özetle', 'listele' veya 'çevir' kullanın. Gerçek bir dil modeli (ChatGPT vb.) bağlamadan bu sistem öngörüyle çalışır.</i>`;
-        }
-
-        const separator = "<br>────────────────────<br>";
+    try {
+        const sysPrompt = userSettings.lang === 'tr' 
+            ? "Sen akıllı bir not asistanısın. Kullanıcının metnini analiz et, istediği işlemi (özetleme, listeleme, çeviri, düzeltme vb.) anla ve metni buna göre işle. Sadece sonucu ver. Açıklama, mazeret veya 'İşte sonuç', 'Tabii' gibi giriş cümleleri kullanma. Mümkün olduğunda <strong>, <em>, <ul>, <li>, <br> gibi HTML etiketleri kullanarak sonucu biçimlendir. Markdown karakterleri (** veya *) KULLANMA, sadece HTML. Metinde komut yoksa içeriğini gramer veya düzenleme açısından iyileştir."
+            : "You are a smart note assistant. Analyze the user's text and perform the requested action (summarize, list, translate, correct, etc.). Give ONLY the result. Do not use filler sentences like 'Here is your summary'. Format the output using basic HTML tags like <strong>, <em>, <ul>, <li>, <br>. DO NOT use markdown characters (**), use ONLY HTML tags. If no command is found, just format and improve the text.";
+            
+        const finalPrompt = `${sysPrompt}\n\nKullanıcı Metni:\n${plainText}`;
+        const url = `https://text.pollinations.ai/${encodeURIComponent(finalPrompt)}?model=openai`;
         
-        noteInput.innerHTML = result + separator + htmlText;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('API Hatası');
+        let data = await response.text();
+        
+        data = data.replace(/```html/g, '').replace(/```/g, '').trim();
+
+        noteInput.innerHTML = `<div class="ai-generated-content" style="background: rgba(124, 77, 255, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid var(--accent); margin-bottom: 15px;">
+            <div style="font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; font-weight: bold;"><i class="fa-solid fa-wand-magic-sparkles"></i> AI:</div>
+            ${data}
+        </div><br>` + htmlText;
         
         updateCharCounter();
         noteInput.scrollTo({ top: 0, behavior: 'smooth' });
         showStatus(userSettings.lang === 'tr' ? '✨ İşlem tamamlandı!' : '✨ Processing complete!', 'ok');
-    }, 800);
+    } catch (error) {
+        console.error("AI Error:", error);
+        fallbackAi(plainText, htmlText);
+    } finally {
+        if (aiBtn) aiBtn.style.pointerEvents = 'auto';
+    }
+}
+
+function fallbackAi(plainText, htmlText) {
+    const lower = plainText.toLowerCase();
+    let result = "";
+    
+    let cleanText = plainText.replace(/özetle|özet|liste|listele|maddele|madde|çevir/gi, '').trim();
+    if (cleanText.length < 2) cleanText = plainText;
+
+    let commandFound = false;
+    if (lower.includes("özetle") || lower.includes("özet")) {
+        const sentences = cleanText.split(/(?<=[.!?])\s+|(?<=\n)/);
+        const summary = sentences.slice(0, Math.max(1, Math.ceil(sentences.length / 2))).join(' ');
+        result = `<strong>Özet:</strong> ${summary}...`;
+        commandFound = true;
+    } else if (lower.includes("çevir")) {
+        result = `<strong>Çeviri (Yerel):</strong> <i>API bağlantısı başarısız olduğu için çevrilemedi.</i><br>${cleanText}`;
+        commandFound = true;
+    } else if (lower.includes("madde") || lower.includes("listele")) {
+        let items = cleanText.includes('\n') ? cleanText.split('\n') : cleanText.includes(',') ? cleanText.split(',') : cleanText.split(' ');
+        items = items.map(i => i.trim()).filter(i => i.length > 1);
+        result = "<strong>Liste:</strong><ul>" + items.map(w => `<li>${w}</li>`).join('') + "</ul>";
+        commandFound = true;
+    }
+
+    if (!commandFound) {
+        result = `<strong>Düzeltilmiş Metin:</strong> ${cleanText.charAt(0).toUpperCase() + cleanText.slice(1)}`;
+    }
+
+    const separator = "<br>────────────────────<br>";
+    noteInput.innerHTML = result + separator + htmlText;
+    updateCharCounter();
+    noteInput.scrollTo({ top: 0, behavior: 'smooth' });
+    showStatus(userSettings.lang === 'tr' ? '✨ Yerel işlem tamamlandı!' : '✨ Local processing complete!', 'ok');
 }
 
 function lockApp() {
